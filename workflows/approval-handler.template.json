@@ -86,7 +86,7 @@
     },
     {
       "parameters": {
-        "authentication": "serviceAccount",
+        "authentication": "oAuth2",
         "operation": "create",
         "title": "={{ $json.document_title }}",
         "driveId": "myDrive",
@@ -97,11 +97,11 @@
       "type": "n8n-nodes-base.googleDocs",
       "typeVersion": 2,
       "position": [1850, 180],
-      "notes": "Attach the Google Docs credential using GOOGLE_SERVICE_ACCOUNT_JSON if supported by this n8n instance. Optionally set a shared folder ID."
+      "notes": "Attach the Google Docs OAuth2 credential. Optionally set a shared folder ID."
     },
     {
       "parameters": {
-        "authentication": "serviceAccount",
+        "authentication": "oAuth2",
         "operation": "update",
         "documentURL": "={{ $json.documentId ?? $json.id }}",
         "simple": true,
@@ -122,11 +122,11 @@
       "type": "n8n-nodes-base.googleDocs",
       "typeVersion": 2,
       "position": [1960, 180],
-      "notes": "Google Docs Create only creates the file. This explicit Update/Insert action writes the generated report body. Attach the same Google Docs credential."
+      "notes": "Google Docs Create only creates the file. This explicit OAuth2 update/insert action writes the generated report body. Attach the same Google Docs credential."
     },
     {
       "parameters": {
-        "authentication": "serviceAccount",
+        "authentication": "oAuth2",
         "operation": "get",
         "documentURL": "={{ $json.documentId ?? $json.id }}",
         "simple": true
@@ -136,7 +136,7 @@
       "type": "n8n-nodes-base.googleDocs",
       "typeVersion": 2,
       "position": [2080, 180],
-      "notes": "Read the newly created document back from Google before marking delivery successful. Attach the same Google Docs credential."
+      "notes": "Read the newly created document back from Google before marking delivery successful. Attach the same Google Docs OAuth2 credential."
     },
     {
       "parameters": {
