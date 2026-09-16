@@ -75,7 +75,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM ticket_cluster.ingest_ticket($1, $2, $3::timestamptz, $4::vector, $5, 0.84, 3, 3, $6);",
+        "query": "SELECT * FROM ticket_cluster.ingest_ticket($1, $2, $3::timestamptz, $4::vector, $5, 0.85, 3, 3, $6);",
         "options": { "queryReplacement": "={{ [$json.source_event_id, $json.text, $json.received_at, $json.embedding_vector, $json.embedding_model, $json.workflow_version] }}" }
       },
       "id": "0f239868-f6f0-4d0d-88b6-4d5d7fd4c006",
@@ -116,7 +116,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT * FROM ticket_cluster.ingest_ticket($1, $2, $3::timestamptz, NULL, NULL, 0.84, 3, 3, $4);",
+        "query": "SELECT * FROM ticket_cluster.ingest_ticket($1, $2, $3::timestamptz, NULL, NULL, 0.85, 3, 3, $4);",
         "options": { "queryReplacement": "={{ [$json.source_event_id, $json.text, $json.received_at, $json.workflow_version] }}" }
       },
       "id": "0f239868-f6f0-4d0d-88b6-4d5d7fd4c009",

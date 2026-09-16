@@ -52,6 +52,6 @@ This is suitable as a **small, human-reviewed sprint demo** using synthetic tick
 - [x] Simulator dry-run validated locally.
 - [x] Templates contain placeholders rather than secret values.
 - [x] SQL includes core indexes and audit/idempotency constraints.
-- [ ] Recover the current failed Sheets-delivery execution in n8n and verify one Sheet row plus one recorded Google Doc URL.
-- [ ] Complete TC-01 through TC-11 and record only observed outcomes in `docs/evaluation.md`.
+- [x] Recovered the Sheets-delivery execution and verified a recorded Google Doc URL plus delivered report state.
+- [x] Completed TC-01 through TC-11 and recorded only observed final-run outcomes in `docs/evaluation.md`.
 - [ ] Confirm backups, n8n execution-data retention, and access controls before any real-data pilot.

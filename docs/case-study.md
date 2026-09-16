@@ -1,45 +1,51 @@
-# Case study scaffold — Support ticket root-cause clustering
+# Case study — support-ticket root-cause clustering
 
-## Headline
+## Outcome
 
-Pending: one sentence that states the target user, recurring workflow changed, and measured result. Do not insert a result until `evaluation.md` contains evidence.
+I built a support-ops workflow for a lead at a 50–500-person SaaS company: it turns recurring synthetic Slack tickets into evidence-backed root-cause clusters, requires human approval, and only then alerts engineering. In the final fixed 11-case synthetic run, all 11 expected safe behaviours were observed; the checkout report became review-ready in about 99 seconds and its approved delivery completed in 7.4 seconds.
+
+These are synthetic/proxy results, not claims about a production support team or real customer data.
 
 ## User, problem, and scope
 
-- Target user: Support lead / support-ops practitioner at a 50–500-person SaaS company without a dedicated support-insights analyst.
-- Job to be done: Detect recurring underlying bugs from differently worded tickets early enough to give engineering one evidence-backed alert.
-- Existing workflow: Tickets arrive in Slack; agents triage one-by-one; a lead manually notices patterns later; duplicate investigations and late incident discovery follow.
-- Evidence and assumption: Customer data was unavailable, so 11 synthetic tickets and a proxy user are used. Label all resulting evidence as synthetic/proxy.
-- Non-goals: no real customer data, multi-tenant product, custom dashboard, or LangGraph rebuild.
+The target user is a support lead without a dedicated support-insights analyst. Their recurring problem is noticing a real incident only after several differently worded tickets have already caused repeated investigation.
 
-## Workflow map
+The prototype does not ingest real customer data, offer a multi-tenant service, replace a ticketing platform, or auto-alert engineering. It uses a fixed synthetic test set because company data was unavailable.
+
+## Workflow changed
 
 | Stage | Before | After |
 |---|---|---|
-| Trigger | New support ticket | Slack ticket event |
-| Input | Free-text ticket, agent context | Validated text, source event ID, timestamp |
-| Judgment | Each agent and later the support lead | Deterministic seed-anchor grouping; LLM verification; human final approval |
-| Tools | Slack and manual investigation | Slack, n8n, Gemini, Postgres/pgvector, OpenRouter, Google Docs/Sheets |
-| Output | Repeated investigations / late discovery | Auditable cluster, review draft, approved engineering alert |
-| Exceptions | Usually manual and inconsistent | Invalid input, provider errors, low confidence, and rejected/split clusters enter reviewable states |
+| Trigger | Agents notice individual Slack tickets | Signed Slack event creates an idempotent intake record |
+| Grouping | Lead manually spots patterns later | Gemini embedding compared to a fixed pgvector seed anchor |
+| Judgment | Informal manual triage | Strict structured LLM verification plus confidence threshold |
+| Approval | Alert quality varies by person/time | Support lead approves, rejects, or splits a Slack review card |
+| Output | Duplicate investigation and delayed escalation | Auditable cluster, Google Doc report, Sheet log, engineering alert |
 
-## System and trade-offs
+## System design and trade-offs
 
-Describe the event flow from the system plan. Explain why assignment uses a cluster's seed embedding rather than a drifting centroid; why the centroid remains display-only; why Slack/Sheets/Docs were chosen over a custom UI; and why an alert needs human approval.
+Slack provides the interface; n8n orchestrates; Postgres/pgvector stores durable state; Gemini supplies embeddings and a fallback model path; OpenRouter is the primary verification/report provider; Google Docs and Sheets provide a lightweight operator record.
 
-## Delegation and judgment
+Assignment uses a cluster’s first-ticket seed embedding, not its moving centroid. That prevents a series of borderline tickets from slowly changing the definition of a cluster. The centroid is retained as a display statistic only. A deterministic threshold routes candidates, LLM output must satisfy a strict schema, and a human retains final alert authority.
 
-- Deterministic system work: validation, idempotency, embeddings, seed-anchor comparison, centroid recomputation, audit logging, delivery.
-- AI work: root-cause verification and structured report drafting.
-- Human work: deciding whether evidence is sufficient to alert engineering, and rejecting/splitting/reopening a cluster.
-- AI collaboration note: list the tools used, what work was delegated, how output was verified, what was rejected/corrected, and the decisions personally owned.
+## Evaluation, failures, and changes
 
-## Evaluation and results
+The full result table is in [`evaluation.md`](evaluation.md). The final pass grouped TC-01–TC-04 together, isolated gateway-outage TC-08 and non-English TC-10, rejected the malformed cases, and produced one approved checkout report.
 
-Link the fixed test set and baseline protocol. Insert measured grouping accuracy, false-merge count, latency, manual-touch comparison, and failure/regression results only after they are recorded. Explain the sample size and proxy-data limitation.
+The most useful failure was a gateway-outage ticket that initially merged with checkout at 0.8469 similarity under a 0.84 threshold. The support gate split that draft, and I calibrated the active workflow to 0.85. The final run kept the clear checkout reports (0.9362–0.9503) together and isolated the 0.8469 gateway case. Other observed fixes covered an OpenRouter overload fallback, n8n’s callback-code runtime differences, and Sheets automatic mapping.
 
-## Two-week next iteration plan
+The keyword-only baseline also merged checkout and gateway. It is a reproducible quality reference, not a human-time benchmark; no time-saved claim is made.
 
-1. Shadow-run against a consented, minimized real-data source with a support lead; compare clusters without auto-alerting.
-2. Calibrate thresholds per product area and add a labelled evaluation set from reviewed incidents.
-3. Add issue-tracker integration only after alert precision and operator trust meet the documented acceptance criteria.
+## AI collaboration and human judgment
+
+AI is used for embedding, root-cause verification, and report drafting. Deterministic database code owns idempotency, assignment, thresholds, audit records, and delivery state. The human reviewer decides whether the evidence justifies an engineering alert and can reject or split unsafe clusters.
+
+Implementation assistance was used to draft workflow/configuration artifacts and diagnose errors. Generated workflow code was verified through local JSON/Code-node checks and live execution evidence. The core decisions personally owned by the project builder were the problem scope, synthetic-data boundary, threshold calibration, human approval gate, and the decision not to claim production results.
+
+## Limits and next two weeks
+
+This is a single-instance synthetic demo. It needs a real support-lead study, human baseline timing, access controls/retention settings, delivery-outbox hardening, and queue-based n8n workers before production use.
+
+1. Shadow-run against consented, minimized real data with a support lead and measure manual baseline time/quality.
+2. Add labelled incidents, calibrate thresholds per product area, and monitor false merges/review load.
+3. Add queue workers, delivery retries/outbox, metrics, backups, and an issue-tracker integration only after operator trust is established.

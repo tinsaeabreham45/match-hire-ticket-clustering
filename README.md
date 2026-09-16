@@ -39,6 +39,7 @@ This shows the exact synthetic support tickets that would be sent. It changes no
 3. Move into the unzipped project folder. For example: `cd ~/Downloads/match-hire-ticket-clustering`.
 4. Run: `python3 scripts/ticket_simulator.py --dry-run`.
 5. You should see ticket cases `TC-01` through `TC-11` printed on screen. This confirms the sample-ticket component works.
+6. Optionally run `python3 scripts/keyword_baseline.py` to reproduce the deliberately simple, non-semantic quality baseline used in the evaluation.
 
 ### Option B — operate the live demo
 
@@ -60,8 +61,8 @@ There is not yet a public, anonymous “anyone can run it” URL. That would req
 
 ## Evidence status
 
-The evaluation matrix and result fields are ready in [`docs/evaluation.md`](docs/evaluation.md), but no live measurements are claimed yet. Record baseline, latency, failures, and proxy-user feedback before presenting outcomes.
+The final fixed synthetic evaluation is recorded in [`docs/evaluation.md`](docs/evaluation.md): 11/11 expected safe behaviours were observed, including one approved end-to-end delivery. It includes failure/regression evidence and clearly states the remaining limitation: no independent human-time baseline or real-customer-data claim.
 
 ## Release readiness
 
-[`docs/release-readiness.md`](docs/release-readiness.md) records the implemented security controls, the honest scale limits of this single-instance synthetic-data demo, and the production hardening path. The outstanding Sheets-delivery recovery and evaluation cases remain explicit release checklist items rather than implied as complete.
+[`docs/release-readiness.md`](docs/release-readiness.md) records the implemented security controls, the honest scale limits of this single-instance synthetic-data demo, and the production hardening path. Use [`docs/submission.md`](docs/submission.md) as the final handoff and screen-recording checklist.

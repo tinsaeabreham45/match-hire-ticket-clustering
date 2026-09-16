@@ -100,7 +100,7 @@ Support lead / support ops person at a mid-size SaaS company (50-500 employees, 
 
 Note: since there's no live company data, tickets are synthetic — generated and posted into the Slack channel by a small ticket-simulator bot to mimic real-time arrival, rather than pasted in manually. This is the one "simulated" piece; state this assumption explicitly in the case study.
 
-**Embedding contract:** all vectors use `gemini-embedding-001` with task type `CLUSTERING` and `output_dimensionality: 768`. A model or dimension change requires a fresh collection and re-embedding; vectors from different embedding spaces must never be compared. This fixed dimension allows a `vector(768)` pgvector index and a reproducible threshold evaluation.
+**Embedding contract:** all vectors use `gemini-embedding-001` with task type `CLUSTERING` and `output_dimensionality: 768`. A model or dimension change requires a fresh collection and re-embedding; vectors from different embedding spaces must never be compared. This fixed dimension allows a `vector(768)` pgvector index and a reproducible threshold evaluation. The evaluated assignment threshold is `0.85`: it retains the English checkout reports (0.9362–0.9503) while rejecting the observed 0.8469 payment-gateway false merge. The French checkout case is intentionally routed to a separate reviewable cluster at 0.8478 rather than risk an automatic cross-language merge.
 
 ## 4a. Infrastructure status
 - [DONE] EC2 instance launched (t3.small, Ubuntu), Elastic IP allocated (16.170.93.79), nip.io hostname in use (16.170.93.79.nip.io) — no domain purchase needed

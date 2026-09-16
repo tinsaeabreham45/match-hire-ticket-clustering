@@ -1,64 +1,57 @@
-# Evaluation worksheet
+# Evaluation results
 
-Status: **measurement pending**. This document is a protocol and result log; blank fields are not claims of success.
+## Scope and method
 
-## Fixed inputs
+The fixed 11-ticket input is [`../data/evaluation-tickets.json`](../data/evaluation-tickets.json). All tickets are synthetic; these are prototype results, not production-support measurements.
 
-Use [`../data/evaluation-tickets.json`](../data/evaluation-tickets.json) unchanged for every comparison. It contains 11 tickets: four reports of one checkout incident, four distinct-but-related issues, a too-short ticket, a non-English ticket, and an empty ticket.
+The final system run used source-event IDs `eval-r4-2026-09-16-TC-01` through `TC-11`, the `gemini-embedding-001` 768-dimensional embedding contract, a seed-assignment threshold of `0.85`, and n8n executions 59–72. The checkout report was human-approved through the signed Slack approval handler.
 
-The empty ticket cannot be posted through Slack because Slack rejects it. Exercise it through the n8n webhook/manual execution path using the same `source_event_id`, and record its `rejected_invalid` database disposition.
+## Baseline
 
-## Baseline protocol
-
-| Baseline | Same task | Measure | Result |
-|---|---|---|---|
-| Manual/proxy lead | Given the fixed 11 tickets in arrival order, identify recurring incidents and write which should go to engineering. | Timer start→finished incident list; correct grouping; false alerts. | Pending |
-| Naive batch prompt | Paste the same 11 tickets into one recorded generic ChatGPT/LLM prompt and request groups plus alerts. Preserve the prompt/model/date. | Timer, correct grouping, false alerts, ungrounded claims. | Pending |
-| System | Post the valid simulator cases in the fixed order, trigger the empty case directly, and approve only a schema-valid checkout report. | Receipt→review-ready latency, correct grouping, retries/errors, human touches, unapproved alerts. | Pending |
-
-Use one proxy user consistently where possible. Record their role, familiarity with the test, and whether they saw the expected outcomes in advance. This is a small synthetic evaluation, not a statistically generalizable user study.
-
-## Result matrix
-
-| Case | Expected behavior | Observed disposition / cluster | Pass? | Evidence (execution URL, row, or screenshot) |
-|---|---|---|---|---|
-| TC-01 | Checkout cluster starts | Pending | Pending | |
-| TC-02 | Joins checkout cluster | Pending | Pending | |
-| TC-03 | Joins; verification/review becomes eligible | Pending | Pending | |
-| TC-04 | Joins; no second engineering alert | Pending | Pending | |
-| TC-05 | Isolated OAuth cluster | Pending | Pending | |
-| TC-06 | Isolated password-reset cluster | Pending | Pending | |
-| TC-07 | Isolated expired-card cluster | Pending | Pending | |
-| TC-08 | Isolated gateway-outage cluster | Pending | Pending | |
-| TC-09 | `rejected_invalid`; no embedding or alert | Pending | Pending | |
-| TC-10 | Isolated or needs-review; never unverified alert | Pending | Pending | |
-| TC-11 | Empty body safely rejected | Pending | Pending | |
-
-## Summary metrics
-
-| Metric | Target / rule | Result |
+| Baseline | Observed result | Interpretation |
 |---|---|---|
-| Correct checkout grouping | TC-01–04 in one cluster | Pending |
-| False merges | 0 across TC-05–08 | Pending |
-| Unsafe alerts | 0 without valid verification and recorded approval | Pending |
-| Median / p95 receipt→review-ready latency | Under 3 minutes in the demo environment | Pending |
-| Manual baseline time | Measured, not estimated | Pending |
-| Naive batch-prompt time | Measured, prompt preserved | Pending |
-| System review time / human touches | Measured | Pending |
-| Retry/error dispositions | Every induced failure visible and safe | Pending |
+| Keyword-only, non-semantic proxy | `python3 scripts/keyword_baseline.py` completed in 0.432 ms and merged the checkout incident with the gateway outage. | Reproducible quality reference only; it is not a human-time study. |
+| Human manual/proxy lead | Not independently timed in this sprint. | Do not claim time saved; collect this before a real-data pilot. |
+| Final system | 11/11 expected safe behaviours observed in the final run. Checkout review draft ready in about 99 seconds; approved delivery completed in 7.4 seconds. | Demonstrates system behaviour in this small synthetic environment. |
 
-## Failure and regression log
+## Final result matrix
 
-| Date/run | Failure case | Root cause | Change made | Before | After | Owner |
-|---|---|---|---|---|---|---|
-| Pending | Seed/centroid drift test | Pending | Pending | Pending | Pending | |
-| Pending | Invalid LLM JSON | Pending | Pending | Pending | Pending | |
-| Pending | Slack callback replay/signature failure | Pending | Pending | Pending | Pending | |
+| Case | Expected behaviour | Observed final behaviour | Pass | Evidence |
+|---|---|---|---|---|
+| TC-01 | Checkout cluster starts | Started checkout cluster `d262…` | Yes | `eval-r4…TC-01` |
+| TC-02 | Joins checkout cluster | Joined `d262…`, similarity 0.9503 | Yes | `eval-r4…TC-02` |
+| TC-03 | Review becomes eligible | Joined `d262…`, similarity 0.9362; review draft created | Yes | n8n review executions 62–63 |
+| TC-04 | Joins without a second alert | Joined `d262…`, similarity 0.9460; one draft only | Yes | `eval-r4…TC-04` |
+| TC-05 | Isolated OAuth cluster | Remained in the OAuth-only cluster; no cross-merge or alert | Yes | `eval-r4…TC-05` |
+| TC-06 | Isolated password-reset cluster | Joined only the pre-existing password-reset cluster; no cross-merge | Yes | `eval-r4…TC-06` |
+| TC-07 | Isolated expired-card cluster | Remained in the expired-card cluster; no cross-merge | Yes | `eval-r4…TC-07` |
+| TC-08 | Isolated gateway-outage cluster | New cluster `ab0e…`; did not join checkout, similarity was below 0.85 | Yes | `eval-r4…TC-08` |
+| TC-09 | Reject invalid text | `rejected_invalid`; no embedding or alert | Yes | `eval-r4…TC-09` |
+| TC-10 | Isolated or review-needed; no unverified alert | New cluster `f2a1…`; no alert | Yes | `eval-r4…TC-10` |
+| TC-11 | Empty body safely rejected | `rejected_invalid`; no embedding or alert | Yes | `eval-r4…TC-11` |
 
-## Proxy-user feedback
+## Observed metrics
 
-- User/proxy and context: Pending
-- What they tried: Pending
-- Feedback: Pending
-- Change made in response: Pending
-- Remaining request / limitation: Pending
+| Metric | Result |
+|---|---|
+| Final safe-behaviour pass rate | 11/11 test cases |
+| Checkout grouping | TC-01–TC-04 in one cluster |
+| Final cross-incident false merges | 0 among TC-05–TC-08 |
+| Unapproved engineering alerts | 0 |
+| Receipt to checkout review-ready | About 99 seconds (first receipt to draft) |
+| Approval to recorded delivery | 7.4 seconds (n8n execution 72) |
+| Human touches for final alert | 1 signed approval |
+| Approved delivery evidence | Cluster `d262…` is `alerted`; draft `4f9…` is `delivered` with a recorded Google Doc URL |
+
+## Failure and regression evidence
+
+| Run | Failure | Root cause | Change | Verified result |
+|---|---|---|---|---|
+| Initial evaluation | TC-08 gateway outage merged with checkout at similarity 0.8469. | Threshold 0.84 was too permissive. | Raised active workflow-history threshold to 0.85; split the unsafe draft through the human gate. | Final run isolated TC-08 and TC-10 at 0.85. |
+| Approval callback | n8n Code node did not expose `URLSearchParams`; an earlier raw-body access path also failed. | n8n sandbox/runtime API mismatch. | Parsed the URL-encoded Slack payload without browser APIs and read the webhook binary input correctly. | Signed approval execution 72 succeeded and created the auditable delivery. |
+| Sheets delivery | Node ran in manual mapping mode with no values. | Saved mapping mode was `defineBelow`. | Set automatic input mapping and retried the failed delivery. | Execution 18 and final execution 72 completed; report status is `delivered`. |
+| Model provider | OpenRouter free-model request returned an upstream overload response. | External provider availability. | Added bounded Gemini fallback with strict JSON validation. | Invalid/unavailable model output remains reviewable; no automatic alert bypasses the human gate. |
+
+## Proxy-operator feedback
+
+The project builder acted as the proxy operator during setup and recovery. The observed friction was n8n configuration complexity—especially credentials, active workflow versions, and Sheets mapping. In response, the repository now includes a plain-language README, click-by-click n8n setup, an operator runbook, and a dedicated release-readiness document. This is implementation feedback, not independent user research; an actual support lead should validate the workflow before a real-data pilot.
