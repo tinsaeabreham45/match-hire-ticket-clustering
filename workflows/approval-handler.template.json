@@ -201,6 +201,8 @@
       "parameters": {
         "method": "POST",
         "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendHeaders": true,
         "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
         "sendBody": true,
@@ -215,6 +217,17 @@
       "typeVersion": 4.2,
       "position": [3000, 180],
       "notes": "Attach HTTP Header Auth using SLACK_BOT_TOKEN as Authorization: Bearer. This node is reachable only after a recorded approve action and successful document/audit delivery."
+    },
+    {
+      "parameters": {
+        "jsCode": "if ($json.ok !== true) {\n  throw new Error(`Engineering Slack alert was rejected: ${$json.error ?? 'unknown Slack error'}`);\n}\nreturn $input.all();"
+      },
+      "id": "c5066b52-1cc4-46d5-8b23-000000000013a",
+      "name": "Verify engineering alert delivered",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3230, 180],
+      "notes": "Fail visibly if Slack returns ok: false instead of treating an API-level rejection as success."
     },
     {
       "parameters": {
@@ -244,7 +257,8 @@
     "Append approved audit row to Sheets": { "main": [[{ "node": "Rejoin delivery context after Sheets", "type": "main", "index": 0 }]] },
     "Rejoin delivery context after Sheets": { "main": [[{ "node": "Mark report delivered and cluster alerted", "type": "main", "index": 0 }]] },
     "Mark report delivered and cluster alerted": { "main": [[{ "node": "Build engineering alert", "type": "main", "index": 0 }]] },
-    "Build engineering alert": { "main": [[{ "node": "Notify engineering after approval", "type": "main", "index": 0 }]] }
+    "Build engineering alert": { "main": [[{ "node": "Notify engineering after approval", "type": "main", "index": 0 }]] },
+    "Notify engineering after approval": { "main": [[{ "node": "Verify engineering alert delivered", "type": "main", "index": 0 }]] }
   },
   "pinData": {},
   "active": false,
