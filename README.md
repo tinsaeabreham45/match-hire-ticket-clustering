@@ -11,12 +11,12 @@ This is a job-application sprint artifact. It uses synthetic data as a proxy for
 3. When a cluster reaches three tickets, verifies the shared root cause, drafts a report, and posts it to `#support-triage` for a human decision.
 4. Only an approved review can create a Google Doc and notify `#eng-alerts`.
 
-The current architecture, assumptions, data contracts, safety gates, and two-day delivery scope are in [the system plan](docs/system-plan.md). The original grading brief is [here](docs/job-brief.md).
+The architecture, safety gates, evaluation approach, and operator handoff are documented in this README and the public-facing files under `docs/`.
 
 ## Three-step setup
 
 1. On the EC2 Postgres/pgvector service, apply [`docs/sql/001_cluster_schema.sql`](docs/sql/001_cluster_schema.sql). This is destructive only if you deliberately run its optional reset block (not included).
-2. In n8n, import the three workflow templates from `workflows/`, attach the pre-existing credential placeholders listed in the system plan, set channel/model/Google identifiers and the review sub-workflow ID, then activate only after the dry-run checks in the runbook pass.
+2. In n8n, import the three workflow templates from `workflows/`, attach the required credentials, set channel/model/Google identifiers and the review sub-workflow ID, then activate only after the dry-run checks in the runbook pass.
 3. Copy `.env.example` to an untracked `.env`; run `python3 scripts/ticket_simulator.py --dry-run` first, then run it with `--post` after setting the Slack token and support-channel ID.
 
 ## Repository map
@@ -24,7 +24,7 @@ The current architecture, assumptions, data contracts, safety gates, and two-day
 - `workflows/` — n8n import templates and node configuration notes.
 - `scripts/` — dependency-free synthetic-ticket simulator.
 - `data/` — fixed 11-case evaluation input.
-- `docs/` — operator runbook, evaluation worksheet, case-study scaffold, SQL schema, plan, and original brief.
+- `docs/` — operator runbook, evaluation worksheet, case study, release readiness notes, and SQL schema.
 
 ## Run it without technical background
 
@@ -65,4 +65,4 @@ The final fixed synthetic evaluation is recorded in [`docs/evaluation.md`](docs/
 
 ## Release readiness
 
-[`docs/release-readiness.md`](docs/release-readiness.md) records the implemented security controls, the honest scale limits of this single-instance synthetic-data demo, and the production hardening path. Use [`docs/submission.md`](docs/submission.md) as the final handoff and screen-recording checklist.
+[`docs/release-readiness.md`](docs/release-readiness.md) records the implemented security controls, the honest scale limits of this single-instance synthetic-data demo, and the production hardening path.

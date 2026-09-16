@@ -8,10 +8,10 @@ Operate the synthetic-ticket clustering demo safely. The support lead owns appro
 
 1. Confirm the EC2 n8n endpoint is HTTPS-reachable and the Postgres/pgvector service is healthy.
 2. Apply `docs/sql/001_cluster_schema.sql` once; confirm the `ticket_cluster` schema and `vector` extension exist.
-3. In n8n's credential store, add only the placeholder credentials listed in the system plan. Never paste their values into workflow fields, exports, logs, or this repository.
+3. In n8n's credential store, add the required integration credentials. Never paste their values into workflow fields, exports, logs, or this repository.
 4. Import all three inactive templates in `workflows/`: core intake, cluster review, and approval handler. In the core workflow select the imported review sub-workflow by ID.
 5. Attach the appropriate Slack, Postgres, Gemini, and OpenRouter credentials; replace every `REPLACE_WITH_*` configuration value; and configure an error workflow.
-6. Confirm Google Docs/Sheets authentication works in this n8n version before enabling their nodes. If it does not, update the system plan with the supported method; do not invent a new untracked credential.
+6. Confirm Google Docs/Sheets authentication works in this n8n version before enabling their nodes. Document the supported method in the runbook before handoff.
 7. Expose `SLACK_SIGNING_SECRET` only as a server-side n8n environment variable and allow the Code node's built-in `crypto` module. Configure Slack Interactivity to the approval handler's HTTPS production webhook, then test valid, stale, and replayed callbacks.
 
 ## Dry run then activation

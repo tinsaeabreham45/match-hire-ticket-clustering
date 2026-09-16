@@ -26,3 +26,7 @@ run-results/
 data/*.local.*
 *-final.zip
 deliverables/*.zip
+
+# Private application-planning and submission-working notes
+docs/system-plan.md
+docs/submission.md
