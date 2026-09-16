@@ -24,3 +24,4 @@ venv/
 reports/
 run-results/
 data/*.local.*
+*-final.zip
