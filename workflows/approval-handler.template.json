@@ -126,13 +126,27 @@
     },
     {
       "parameters": {
-        "jsCode": "const report = $('Format approved report').item.json;\nconst doc = $json;\nconst google_doc_id = String(doc.documentId ?? doc.id ?? '');\nif (!google_doc_id) throw new Error('Google Docs node returned no document ID');\nconst google_doc_url = `https://docs.google.com/document/d/${google_doc_id}/edit`;\nreturn [{ json: { ...report, google_doc_id, google_doc_url, reviewed_at: new Date().toISOString() } }];"
+        "authentication": "serviceAccount",
+        "operation": "get",
+        "documentURL": "={{ $json.documentId ?? $json.id }}",
+        "simple": true
+      },
+      "id": "c5066b52-1cc4-46d5-8b23-000000000008b",
+      "name": "Verify approved Google Doc content",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [2080, 180],
+      "notes": "Read the newly created document back from Google before marking delivery successful. Attach the same Google Docs credential."
+    },
+    {
+      "parameters": {
+        "jsCode": "const report = $('Format approved report').item.json;\nconst doc = $json;\nconst google_doc_id = String(doc.documentId ?? doc.id ?? '');\nif (!google_doc_id) throw new Error('Google Docs verification returned no document ID');\nconst expected = String(report.document_content ?? '').trim();\nconst actual = String(doc.content ?? '').trim();\nif (!actual || !actual.includes(expected.slice(0, 80))) {\n  throw new Error('Google Docs write verification failed: the generated document is empty or does not contain the report text. The report was not marked delivered.');\n}\nconst google_doc_url = `https://docs.google.com/document/d/${google_doc_id}/edit`;\nreturn [{ json: { ...report, google_doc_id, google_doc_url, reviewed_at: new Date().toISOString() } }];"
       },
       "id": "c5066b52-1cc4-46d5-8b23-000000000009",
       "name": "Prepare delivery audit row",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2080, 180]
+      "position": [2200, 180]
     },
     {
       "parameters": {
@@ -147,7 +161,7 @@
       "name": "Append approved audit row to Sheets",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
-      "position": [2310, 180],
+      "position": [2430, 180],
       "notes": "Attach Google Sheets credential and create the header row before enabling. Keep this as an audit/dashboard only; Postgres remains source of truth."
     },
     {
@@ -224,7 +238,8 @@
     "Load approved draft": { "main": [[{ "node": "Format approved report", "type": "main", "index": 0 }]] },
     "Format approved report": { "main": [[{ "node": "Create approved Google Doc", "type": "main", "index": 0 }]] },
     "Create approved Google Doc": { "main": [[{ "node": "Write approved report content to Google Doc", "type": "main", "index": 0 }]] },
-    "Write approved report content to Google Doc": { "main": [[{ "node": "Prepare delivery audit row", "type": "main", "index": 0 }]] },
+    "Write approved report content to Google Doc": { "main": [[{ "node": "Verify approved Google Doc content", "type": "main", "index": 0 }]] },
+    "Verify approved Google Doc content": { "main": [[{ "node": "Prepare delivery audit row", "type": "main", "index": 0 }]] },
     "Prepare delivery audit row": { "main": [[{ "node": "Append approved audit row to Sheets", "type": "main", "index": 0 }]] },
     "Append approved audit row to Sheets": { "main": [[{ "node": "Rejoin delivery context after Sheets", "type": "main", "index": 0 }]] },
     "Rejoin delivery context after Sheets": { "main": [[{ "node": "Mark report delivered and cluster alerted", "type": "main", "index": 0 }]] },
