@@ -1,0 +1,44 @@
+{
+  "name": "Requeue cluster verification (operator template)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "d4c20000-0000-4000-8000-000000000001",
+      "name": "Manual requeue",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cluster_id = 'REPLACE_WITH_CLUSTER_ID_TO_REQUEUE';\nif (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cluster_id)) throw new Error('Replace REPLACE_WITH_CLUSTER_ID_TO_REQUEUE with a cluster UUID before executing');\nreturn [{ json: { cluster_id, requeue_reason: 'operator_provider_recovery' } }];"
+      },
+      "id": "d4c20000-0000-4000-8000-000000000002",
+      "name": "Set cluster to requeue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300],
+      "notes": "Operator-only. Replace only the UUID placeholder; this reuses stored evidence and adds no new Slack ticket."
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_IMPORTED_CLUSTER_REVIEW_WORKFLOW_ID" },
+        "options": {}
+      },
+      "id": "d4c20000-0000-4000-8000-000000000003",
+      "name": "Run cluster review again",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [740, 300]
+    }
+  ],
+  "connections": {
+    "Manual requeue": { "main": [[{ "node": "Set cluster to requeue", "type": "main", "index": 0 }]] },
+    "Set cluster to requeue": { "main": [[{ "node": "Run cluster review again", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "template": true, "credentialFree": true, "operatorOnly": true },
+  "tags": []
+}

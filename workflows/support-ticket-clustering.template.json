@@ -1,0 +1,145 @@
+{
+  "name": "Support Ticket Root-Cause Clustering (template)",
+  "nodes": [
+    {
+      "parameters": {
+        "event": "message"
+      },
+      "id": "0f239868-f6f0-4d0d-88b6-4d5d7fd4c001",
+      "name": "Slack ticket received",
+      "type": "n8n-nodes-base.slackTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "Attach the Slack credential using SLACK_BOT_TOKEN. Subscribe only to the support-ticket channel; confirm bot-generated simulator messages are delivered."
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $json.event ?? $json;\nconst raw = String(event.text ?? '').replace(/^\\[SIM:[^\\]]+\\]\\s*/, '').trim();\nconst sourceEventId = String(event.client_msg_id ?? event.event_id ?? `${event.channel ?? 'unknown'}:${event.ts ?? Date.now()}`);\nreturn [{ json: { source_event_id: sourceEventId, text: raw, is_valid: raw.length >= 10, received_at: event.ts ? new Date(Number(String(event.ts).split('.')[0]) * 1000).toISOString() : new Date().toISOString(), source: 'slack', workflow_version: 'v0', original_event: event } }];"
+      },
+      "id": "0f239868-f6f0-4d0d-88b6-4d5d7fd4c002",
+      "name": "Normalize and validate input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [470, 300],
+      "notes": "Do not embed an empty text. Route empty text directly to ingest_ticket with a null embedding to record rejected_invalid."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "leftValue": "={{ $json.is_valid }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "0f239868-f6f0-4d0d-88b6-4d5d7fd4c003",
+      "name": "Has ticket text?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [690, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ taskType: 'CLUSTERING', output_dimensionality: 768, content: { parts: [{ text: $('Normalize and validate input').item.json.text }] } }) }}",
+        "options": { "timeout": 15000, "retry": { "maxTries": 3, "waitBetweenTries": 1000 } }
+      },
+      "id": "0f239868-f6f0-4d0d-88b6-4d5d7fd4c004",
+      "name": "Embed ticket with Gemini",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [910, 220],
+      "notes": "Attach HTTP Header Auth using GEMINI_API_KEY as x-goog-api-key. Keep the API key in n8n credentials, never in this export."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $('Normalize and validate input').item.json;\nconst values = $json.embedding?.values;\nif (!Array.isArray(values) || values.length !== 768 || !values.every(Number.isFinite)) { throw new Error('Invalid Gemini embedding: expected 768 numeric values'); }\nreturn [{ json: { ...input, embedding_model: 'gemini-embedding-001', embedding_vector: `[${values.join(',')}]` } }];"
+      },
+      "id": "0f239868-f6f0-4d0d-88b6-4d5d7fd4c005",
+      "name": "Validate embedding response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1130, 220]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ticket_cluster.ingest_ticket($1, $2, $3::timestamptz, $4::vector, $5, 0.84, 3, 3, $6);",
+        "options": { "queryReplacement": "={{ [$json.source_event_id, $json.text, $json.received_at, $json.embedding_vector, $json.embedding_model, $json.workflow_version] }}" }
+      },
+      "id": "0f239868-f6f0-4d0d-88b6-4d5d7fd4c006",
+      "name": "Assign seed-anchored cluster",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1360, 220],
+      "notes": "Attach the Postgres credential. This uses the Postgres node's parameter binding rather than interpolating ticket text into SQL."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            { "leftValue": "={{ $json.review_required }}", "rightValue": true, "operator": { "type": "boolean", "operation": "true", "singleValue": true } }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "0f239868-f6f0-4d0d-88b6-4d5d7fd4c007",
+      "name": "Verification required?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1590, 220]
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_IMPORTED_CLUSTER_REVIEW_WORKFLOW_ID" },
+        "options": {}
+      },
+      "id": "0f239868-f6f0-4d0d-88b6-4d5d7fd4c008",
+      "name": "Run verification and triage sub-workflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1810, 140],
+      "notes": "After importing cluster-review.template.json, select it here by ID in the n8n UI. The current item provides cluster_id to its Execute Sub-workflow Trigger."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ticket_cluster.ingest_ticket($1, $2, $3::timestamptz, NULL, NULL, 0.84, 3, 3, $4);",
+        "options": { "queryReplacement": "={{ [$json.source_event_id, $json.text, $json.received_at, $json.workflow_version] }}" }
+      },
+      "id": "0f239868-f6f0-4d0d-88b6-4d5d7fd4c009",
+      "name": "Record invalid ticket",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [910, 420],
+      "notes": "Attach the same Postgres credential. This safe path must never reach Gemini or Slack engineering alerts."
+    }
+  ],
+  "connections": {
+    "Slack ticket received": { "main": [[{ "node": "Normalize and validate input", "type": "main", "index": 0 }]] },
+    "Normalize and validate input": { "main": [[{ "node": "Has ticket text?", "type": "main", "index": 0 }]] },
+    "Has ticket text?": { "main": [[{ "node": "Embed ticket with Gemini", "type": "main", "index": 0 }], [{ "node": "Record invalid ticket", "type": "main", "index": 0 }]] },
+    "Embed ticket with Gemini": { "main": [[{ "node": "Validate embedding response", "type": "main", "index": 0 }]] },
+    "Validate embedding response": { "main": [[{ "node": "Assign seed-anchored cluster", "type": "main", "index": 0 }]] },
+    "Assign seed-anchored cluster": { "main": [[{ "node": "Verification required?", "type": "main", "index": 0 }]] },
+    "Verification required?": { "main": [[{ "node": "Run verification and triage sub-workflow", "type": "main", "index": 0 }], []] }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "versionId": "0f239868-f6f0-4d0d-88b6-4d5d7fd4c000",
+  "meta": { "template": true, "credentialFree": true },
+  "tags": []
+}

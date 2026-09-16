@@ -1,0 +1,26 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+credentials*.json
+service-account*.json
+secrets/
+
+# Python and editor artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.idea/
+.vscode/
+
+# Generated outputs and local data
+reports/
+run-results/
+data/*.local.*

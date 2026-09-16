@@ -1,0 +1,60 @@
+[
+  {
+    "case_id": "TC-01",
+    "expected_cluster": "checkout-mobile-safari-500",
+    "text": "Checkout returns a 500 error on my iPhone Safari browser after I tap Pay."
+  },
+  {
+    "case_id": "TC-02",
+    "expected_cluster": "checkout-mobile-safari-500",
+    "text": "Mobile Safari will not complete payment; the checkout page says server error 500."
+  },
+  {
+    "case_id": "TC-03",
+    "expected_cluster": "checkout-mobile-safari-500",
+    "text": "I can buy from Chrome, but on Safari on iOS checkout crashes with HTTP 500."
+  },
+  {
+    "case_id": "TC-04",
+    "expected_cluster": "checkout-mobile-safari-500",
+    "text": "Payment fails only on an iPhone. Safari displays a 500 when submitting checkout."
+  },
+  {
+    "case_id": "TC-05",
+    "expected_cluster": "oauth-401",
+    "text": "Signing in with Google OAuth redirects back to the app with a 401 unauthorized error."
+  },
+  {
+    "case_id": "TC-06",
+    "expected_cluster": "password-reset-delivery",
+    "text": "The password reset email never arrives, including in spam, so I cannot log in."
+  },
+  {
+    "case_id": "TC-07",
+    "expected_cluster": "expired-card",
+    "text": "My payment was declined because the saved card has expired. How can I update it?"
+  },
+  {
+    "case_id": "TC-08",
+    "expected_cluster": "gateway-outage",
+    "text": "Every valid card fails at payment today. The checkout says the payment gateway is unavailable."
+  },
+  {
+    "case_id": "TC-09",
+    "expected_cluster": null,
+    "expected_disposition": "rejected_invalid",
+    "text": "broken"
+  },
+  {
+    "case_id": "TC-10",
+    "expected_cluster": null,
+    "expected_disposition": "needs_review_or_isolated",
+    "text": "Je ne peux pas terminer le paiement sur Safari mobile : erreur 500."
+  },
+  {
+    "case_id": "TC-11",
+    "expected_cluster": null,
+    "expected_disposition": "rejected_invalid",
+    "text": ""
+  }
+]
