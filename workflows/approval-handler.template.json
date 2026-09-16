@@ -89,7 +89,6 @@
         "authentication": "serviceAccount",
         "operation": "create",
         "title": "={{ $json.document_title }}",
-        "content": "={{ $json.document_content }}",
         "driveId": "myDrive",
         "folderId": ""
       },
@@ -99,6 +98,31 @@
       "typeVersion": 2,
       "position": [1850, 180],
       "notes": "Attach the Google Docs credential using GOOGLE_SERVICE_ACCOUNT_JSON if supported by this n8n instance. Optionally set a shared folder ID."
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "operation": "update",
+        "documentURL": "={{ $json.documentId ?? $json.id }}",
+        "simple": true,
+        "actionsUi": {
+          "actionFields": [
+            {
+              "object": "text",
+              "action": "insert",
+              "locationChoice": "endOfSegmentLocation",
+              "insertSegment": "body",
+              "text": "={{ $('Format approved report').item.json.document_content }}"
+            }
+          ]
+        }
+      },
+      "id": "c5066b52-1cc4-46d5-8b23-000000000008a",
+      "name": "Write approved report content to Google Doc",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [1960, 180],
+      "notes": "Google Docs Create only creates the file. This explicit Update/Insert action writes the generated report body. Attach the same Google Docs credential."
     },
     {
       "parameters": {
@@ -199,7 +223,8 @@
     "Approved?": { "main": [[{ "node": "Load approved draft", "type": "main", "index": 0 }], [{ "node": "Close rejected or split draft", "type": "main", "index": 0 }]] },
     "Load approved draft": { "main": [[{ "node": "Format approved report", "type": "main", "index": 0 }]] },
     "Format approved report": { "main": [[{ "node": "Create approved Google Doc", "type": "main", "index": 0 }]] },
-    "Create approved Google Doc": { "main": [[{ "node": "Prepare delivery audit row", "type": "main", "index": 0 }]] },
+    "Create approved Google Doc": { "main": [[{ "node": "Write approved report content to Google Doc", "type": "main", "index": 0 }]] },
+    "Write approved report content to Google Doc": { "main": [[{ "node": "Prepare delivery audit row", "type": "main", "index": 0 }]] },
     "Prepare delivery audit row": { "main": [[{ "node": "Append approved audit row to Sheets", "type": "main", "index": 0 }]] },
     "Append approved audit row to Sheets": { "main": [[{ "node": "Rejoin delivery context after Sheets", "type": "main", "index": 0 }]] },
     "Rejoin delivery context after Sheets": { "main": [[{ "node": "Mark report delivered and cluster alerted", "type": "main", "index": 0 }]] },
