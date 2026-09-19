@@ -6,6 +6,8 @@ Google, OpenRouter, or Gemini.
 ```bash
 node tests/test_delivery_workflow.mjs
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_review_integrity.sql
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_outbox_state_machine.sql
+bash tests/test_ingestion_concurrency.sh
 ```
 
 Use an isolated test database for the SQL check after applying migrations in
