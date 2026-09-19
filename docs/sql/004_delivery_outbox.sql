@@ -67,14 +67,14 @@ BEGIN
   -- A worker may die after an external call but before it writes a checkpoint.
   -- Do not immediately repeat the call. A Google Doc create is non-idempotent,
   -- so it stops for operator reconciliation; the other stages can retry.
-  UPDATE delivery_attempts
-  SET status = CASE WHEN target = 'google_doc' THEN 'failed' ELSE 'retryable' END,
+  UPDATE delivery_attempts a
+  SET status = CASE WHEN a.target = 'google_doc' THEN 'failed' ELSE 'retryable' END,
       locked_at = NULL, next_attempt_at = now(),
-      last_error = coalesce(last_error, CASE WHEN target = 'google_doc'
+      last_error = coalesce(a.last_error, CASE WHEN a.target = 'google_doc'
         THEN 'worker lease expired after a Google Doc call; reconcile before retrying'
         ELSE 'worker lease expired before checkpoint' END),
       updated_at = now()
-  WHERE status = 'processing' AND locked_at < now() - interval '15 minutes';
+  WHERE a.status = 'processing' AND a.locked_at < now() - interval '15 minutes';
 
   SELECT a.* INTO v_attempt
   FROM delivery_attempts a
