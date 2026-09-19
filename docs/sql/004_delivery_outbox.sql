@@ -65,10 +65,15 @@ AS $$
 DECLARE v_attempt delivery_attempts%ROWTYPE;
 BEGIN
   -- A worker may die after an external call but before it writes a checkpoint.
-  -- Do not immediately repeat the call; reclaim only work older than 15 minutes.
+  -- Do not immediately repeat the call. A Google Doc create is non-idempotent,
+  -- so it stops for operator reconciliation; the other stages can retry.
   UPDATE delivery_attempts
-  SET status = 'retryable', locked_at = NULL, next_attempt_at = now(),
-      last_error = coalesce(last_error, 'worker lease expired before checkpoint'), updated_at = now()
+  SET status = CASE WHEN target = 'google_doc' THEN 'failed' ELSE 'retryable' END,
+      locked_at = NULL, next_attempt_at = now(),
+      last_error = coalesce(last_error, CASE WHEN target = 'google_doc'
+        THEN 'worker lease expired after a Google Doc call; reconcile before retrying'
+        ELSE 'worker lease expired before checkpoint' END),
+      updated_at = now()
   WHERE status = 'processing' AND locked_at < now() - interval '15 minutes';
 
   SELECT a.* INTO v_attempt
@@ -105,6 +110,22 @@ BEGIN
   FROM delivery_attempts a
   JOIN cluster_report_drafts d ON d.id = a.report_draft_id
   WHERE a.id = v_attempt.id;
+END;
+$$;
+
+-- Use only after checking the external target. This intentionally makes a
+-- failed stage eligible for a controlled retry; it never runs automatically.
+CREATE OR REPLACE FUNCTION requeue_delivery_attempt(p_attempt_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SET search_path = ticket_cluster, public
+AS $$
+BEGIN
+  UPDATE delivery_attempts
+  SET status = 'retryable', locked_at = NULL, next_attempt_at = now(), updated_at = now()
+  WHERE id = p_attempt_id AND status = 'failed';
+
+  IF NOT FOUND THEN RAISE EXCEPTION 'delivery attempt is not failed'; END IF;
 END;
 $$;
 

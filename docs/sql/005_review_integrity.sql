@@ -110,7 +110,7 @@ BEGIN
   ELSE
     UPDATE clusters SET status = CASE WHEN p_action = 'reject' THEN 'rejected' ELSE 'split' END, updated_at = now() WHERE id = p_cluster_id;
     UPDATE cluster_report_drafts SET status = CASE WHEN p_action = 'reject' THEN 'rejected' ELSE 'split' END, updated_at = now() WHERE id = p_report_draft_id;
-    v_outcome := p_action || 'd';
+    v_outcome := CASE p_action WHEN 'reject' THEN 'rejected' ELSE 'split' END;
   END IF;
 
   INSERT INTO cluster_review_actions (cluster_id, report_draft_id, action, actor_id, callback_id, workspace_id, channel_id)
