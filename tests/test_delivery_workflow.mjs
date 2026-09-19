@@ -64,6 +64,9 @@ const migration007 = readFileSync('docs/sql/007_operational_observability.sql', 
 const migration008 = readFileSync('docs/sql/008_privacy_retention.sql', 'utf8');
 assert.match(migration007, /operational_incidents/);
 assert.match(migration007, /record_workflow_failure/);
+assert.match(migration007, /severity = 'error' AND notified_at/);
+assert.match(operationalMonitor.nodes.find((node) => node.name === 'Refresh operational incidents').parameters.query, /count\(\*\).*refreshed_count/);
+assert.match(operationalMonitor.nodes.find((node) => node.name === 'Build sanitized operations alert').parameters.jsCode, /new Map\(\)/);
 assert.match(migration008, /redact_ticket_before_write/);
 assert.match(migration008, /redact_expired_ticket_content/);
 

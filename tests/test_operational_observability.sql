@@ -22,6 +22,16 @@ BEGIN
     RAISE EXCEPTION 'notified incident was not rate limited';
   END IF;
 
+  INSERT INTO operational_incidents (incident_key, kind, severity, message)
+  VALUES ('test:warning-once', 'review_overdue', 'warning', 'Synthetic warning');
+  PERFORM mark_operational_incidents_notified(ARRAY['test:warning-once']);
+  IF EXISTS (
+    SELECT 1 FROM list_operational_incidents_to_notify(interval '0 seconds')
+    WHERE incident_key = 'test:warning-once'
+  ) THEN
+    RAISE EXCEPTION 'warning incident was repeated after notification';
+  END IF;
+
   PERFORM acknowledge_operational_incident(v_key, 'operator-test', 'Synthetic acknowledgement');
   IF (SELECT status FROM operational_incidents WHERE incident_key = v_key) <> 'acknowledged' THEN
     RAISE EXCEPTION 'incident was not acknowledged';

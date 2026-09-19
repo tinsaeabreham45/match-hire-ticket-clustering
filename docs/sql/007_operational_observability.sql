@@ -97,7 +97,16 @@ BEGIN
     )
     SELECT c.incident_key, c.kind, c.severity, c.reference_id, c.message, c.context FROM candidates c
     ON CONFLICT ON CONSTRAINT operational_incidents_pkey DO UPDATE
-      SET kind = EXCLUDED.kind, severity = EXCLUDED.severity, status = 'open',
+      SET kind = EXCLUDED.kind,
+          severity = EXCLUDED.severity,
+          status = CASE
+            WHEN operational_incidents.status = 'resolved' THEN 'open'
+            ELSE operational_incidents.status
+          END,
+          notified_at = CASE
+            WHEN operational_incidents.status = 'resolved' THEN NULL
+            ELSE operational_incidents.notified_at
+          END,
           last_seen_at = now(), message = EXCLUDED.message, context = EXCLUDED.context
     RETURNING operational_incidents.incident_key, operational_incidents.kind,
               operational_incidents.severity, operational_incidents.message
@@ -118,7 +127,10 @@ AS $$
   SELECT incident_key, severity, message, context
   FROM operational_incidents
   WHERE status = 'open'
-    AND (notified_at IS NULL OR notified_at < now() - p_repeat_after)
+    AND (
+      notified_at IS NULL
+      OR (severity = 'error' AND notified_at < now() - p_repeat_after)
+    )
   ORDER BY CASE severity WHEN 'error' THEN 0 ELSE 1 END, first_seen_at
   LIMIT greatest(1, least(p_limit, 100));
 $$;

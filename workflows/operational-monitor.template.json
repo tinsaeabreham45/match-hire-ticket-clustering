@@ -10,13 +10,13 @@
       "position": [240, 300]
     },
     {
-      "parameters": { "operation": "executeQuery", "query": "SELECT * FROM ticket_cluster.refresh_operational_incidents(); SELECT true AS refresh_completed;" },
+      "parameters": { "operation": "executeQuery", "query": "WITH refreshed AS (SELECT * FROM ticket_cluster.refresh_operational_incidents()) SELECT count(*)::integer AS refreshed_count FROM refreshed;" },
       "id": "f3400000-0000-4000-8000-000000000002",
       "name": "Refresh operational incidents",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [500, 300],
-      "notes": "Attach the existing Postgres credential. Empty output means no current database-derived incident."
+      "notes": "Attach the existing Postgres credential. This query always emits exactly one row so downstream nodes execute once."
     },
     {
       "parameters": { "operation": "executeQuery", "query": "SELECT * FROM ticket_cluster.list_operational_incidents_to_notify();" },
@@ -25,11 +25,11 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [760, 300],
-      "notes": "Attach the existing Postgres credential. Incidents are rate-limited to one reminder per hour."
+      "notes": "Attach the existing Postgres credential. Warnings notify once; unresolved errors may repeat hourly."
     },
     {
       "parameters": {
-        "jsCode": "const incidents=$input.all().map(i=>i.json);if(!incidents.length)return[];const lines=incidents.map(i=>`• [${i.severity}] ${i.message} (${i.incident_key})`);return[{json:{incident_keys:incidents.map(i=>i.incident_key),slack_body:{channel:'REPLACE_WITH_OPERATIONS_CHANNEL_ID',text:`Operational attention needed (${incidents.length})\\n${lines.join('\\n')}`}}}];"
+        "jsCode": "const byKey=new Map();for(const item of $input.all()){const incident=item.json;if(incident.incident_key)byKey.set(incident.incident_key,incident);}const incidents=[...byKey.values()];if(!incidents.length)return[];const lines=incidents.map(i=>`• [${i.severity}] ${i.message} (${i.incident_key})`);return[{json:{incident_keys:incidents.map(i=>i.incident_key),slack_body:{channel:'REPLACE_WITH_OPERATIONS_CHANNEL_ID',text:`Operational attention needed (${incidents.length})\\n${lines.join('\\n')}`}}}];"
       },
       "id": "f3400000-0000-4000-8000-000000000004",
       "name": "Build sanitized operations alert",
