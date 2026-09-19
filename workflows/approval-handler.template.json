@@ -4,6 +4,7 @@
     {
       "parameters": { "httpMethod": "POST", "path": "slack-cluster-approval", "responseMode": "onReceived", "options": { "rawBody": true } },
       "id": "d8100000-0000-4000-8000-000000000001",
+      "webhookId": "3fd0c4bf-0ee3-47b4-9286-581b3f80d7f4",
       "name": "Slack approval callback",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
