@@ -14,7 +14,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const event = $json.event ?? $json;\nconst raw = String(event.text ?? '').replace(/^\\[SIM:[^\\]]+\\]\\s*/, '').trim();\nconst sourceEventId = String(event.client_msg_id ?? event.event_id ?? `${event.channel ?? 'unknown'}:${event.ts ?? Date.now()}`);\nreturn [{ json: { source_event_id: sourceEventId, text: raw, is_valid: raw.length >= 10, received_at: event.ts ? new Date(Number(String(event.ts).split('.')[0]) * 1000).toISOString() : new Date().toISOString(), source: 'slack', workflow_version: 'v0', original_event: event } }];"
+        "jsCode": "const event = $json.event ?? $json;\nconst raw = String(event.text ?? '').replace(/^\\[SIM:[^\\]]+\\]\\s*/, '').trim();\nconst redact = (value) => String(value)\n  .replace(/\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b/gi, '[REDACTED_EMAIL]')\n  .replace(/\\b(?:\\d[ -]?){13,19}\\b/g, '[REDACTED_CARD]')\n  .replace(/(?<![A-Za-z0-9])\\+?\\d[\\d(). -]{7,}\\d(?![A-Za-z0-9])/g, '[REDACTED_PHONE]');\nconst text = redact(raw);\nconst sourceEventId = String(event.client_msg_id ?? event.event_id ?? `${event.channel ?? 'unknown'}:${event.ts ?? Date.now()}`);\nreturn [{ json: { source_event_id: sourceEventId, text, is_valid: text.length >= 10, received_at: event.ts ? new Date(Number(String(event.ts).split('.')[0]) * 1000).toISOString() : new Date().toISOString(), source: 'slack', workflow_version: 'v0', pii_redacted: text !== raw, source_channel: String(event.channel ?? '') } }];"
       },
       "id": "0f239868-f6f0-4d0d-88b6-4d5d7fd4c002",
       "name": "Normalize and validate input",

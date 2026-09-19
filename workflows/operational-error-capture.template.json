@@ -1,0 +1,49 @@
+{
+  "name": "Operational error capture (production template)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "f3300000-0000-4000-8000-000000000001",
+      "name": "When a workflow errors",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "notes": "Select this workflow as the Error Workflow in each production workflow's Settings."
+    },
+    {
+      "parameters": {
+        "jsCode": "const x=$json;const error=x.execution?.error??x.error??{};return[{json:{workflow_id:String(x.workflow?.id??x.execution?.workflowId??''),execution_id:String(x.execution?.id??''),node_name:String(x.execution?.lastNodeExecuted??''),message:String(error.message??x.message??'Workflow failed').replace(/[\\r\\n]+/g,' ').slice(0,1000)}}];"
+      },
+      "id": "f3300000-0000-4000-8000-000000000002",
+      "name": "Sanitize failure metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300],
+      "notes": "Stores workflow metadata and a capped error message only. Do not add ticket body or credential fields."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_cluster.record_workflow_failure($1,$2,$3,$4);",
+        "options": {
+          "queryReplacement": "={{ [$json.workflow_id,$json.execution_id,$json.node_name,$json.message] }}"
+        }
+      },
+      "id": "f3300000-0000-4000-8000-000000000003",
+      "name": "Record operational incident",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [760, 300],
+      "notes": "Attach the existing Postgres credential."
+    }
+  ],
+  "connections": {
+    "When a workflow errors": { "main": [[{ "node": "Sanitize failure metadata", "type": "main", "index": 0 }]] },
+    "Sanitize failure metadata": { "main": [[{ "node": "Record operational incident", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "template": true, "credentialFree": true },
+  "tags": []
+}

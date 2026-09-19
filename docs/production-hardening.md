@@ -1,7 +1,8 @@
-# Production hardening: outbox, review integrity, and serialized intake
+# Production hardening: delivery integrity, operations, and privacy
 
-This branch hardens three correctness boundaries discovered during prototype
-testing. It is not deployed to the live server by default.
+This branch hardens the correctness boundaries discovered during prototype
+testing and adds the operational foundations needed to run them safely. It is
+not deployed to the live server by default.
 
 ## What changes
 
@@ -10,6 +11,8 @@ testing. It is not deployed to the live server by default.
 | Slack notification fails after state says delivered | An outbox records the Docs, Sheets, and engineering-Slack stages separately. Only three confirmed successes finalize delivery. |
 | Any Slack member can approve | The database checks an active approver allowlist, and the workflow checks the expected Slack workspace and triage channel. |
 | Simultaneous tickets race cluster assignment | A transaction-scoped PostgreSQL advisory lock serializes assignment per embedding model. |
+| A workflow failure is invisible or repeated | A sanitized incident ledger, rate-limited operations alerts, and an acknowledgement trail make failures reviewable. |
+| Ticket text retains common PII indefinitely | Write-time redaction removes common email, phone, and card patterns before persistence or embedding; a retention job later removes remaining ticket content. |
 
 ## Migration order
 
@@ -21,6 +24,8 @@ Apply these once, in order, to an isolated staging database first:
 4. `004_delivery_outbox.sql`
 5. `005_review_integrity.sql`
 6. `006_ingestion_serialization.sql`
+7. `007_operational_observability.sql`
+8. `008_privacy_retention.sql`
 
 Migration `005` creates an empty approver allowlist. Before enabling the
 approval workflow, add the support lead's Slack member ID and the existing
@@ -73,4 +78,5 @@ favors manual reconciliation over rapid duplicate external writes.
    made at the threshold crossing.
 
 Do not apply these migrations to production until every staging result is
-recorded and reviewed.
+recorded and reviewed. For the supported staging setup, workflow import order,
+and rollback process, follow [`deployment-guide.md`](deployment-guide.md).

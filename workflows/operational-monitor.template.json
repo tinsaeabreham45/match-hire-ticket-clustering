@@ -1,0 +1,95 @@
+{
+  "name": "Operational incident monitor (production template)",
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "minutes", "minutesInterval": 5 }] } },
+      "id": "f3400000-0000-4000-8000-000000000001",
+      "name": "Check operational health every five minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": { "operation": "executeQuery", "query": "SELECT * FROM ticket_cluster.refresh_operational_incidents(); SELECT true AS refresh_completed;" },
+      "id": "f3400000-0000-4000-8000-000000000002",
+      "name": "Refresh operational incidents",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [500, 300],
+      "notes": "Attach the existing Postgres credential. Empty output means no current database-derived incident."
+    },
+    {
+      "parameters": { "operation": "executeQuery", "query": "SELECT * FROM ticket_cluster.list_operational_incidents_to_notify();" },
+      "id": "f3400000-0000-4000-8000-000000000003",
+      "name": "List incidents needing notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [760, 300],
+      "notes": "Attach the existing Postgres credential. Incidents are rate-limited to one reminder per hour."
+    },
+    {
+      "parameters": {
+        "jsCode": "const incidents=$input.all().map(i=>i.json);if(!incidents.length)return[];const lines=incidents.map(i=>`• [${i.severity}] ${i.message} (${i.incident_key})`);return[{json:{incident_keys:incidents.map(i=>i.incident_key),slack_body:{channel:'REPLACE_WITH_OPERATIONS_CHANNEL_ID',text:`Operational attention needed (${incidents.length})\\n${lines.join('\\n')}`}}}];"
+      },
+      "id": "f3400000-0000-4000-8000-000000000004",
+      "name": "Build sanitized operations alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 300],
+      "notes": "Only incident metadata is sent. Do not add ticket text."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.slack_body) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "f3400000-0000-4000-8000-000000000005",
+      "name": "Notify operations in Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1280, 300],
+      "notes": "Attach the existing Slack API credential and set REPLACE_WITH_OPERATIONS_CHANNEL_ID."
+    },
+    {
+      "parameters": {
+        "jsCode": "if($json.ok!==true)throw new Error(`Operations Slack alert rejected: ${$json.error??'unknown error'}`);return[{json:{incident_keys:$('Build sanitized operations alert').item.json.incident_keys}}];"
+      },
+      "id": "f3400000-0000-4000-8000-000000000006",
+      "name": "Verify operations alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1530, 300]
+    },
+    {
+      "parameters": { "operation": "executeQuery", "query": "SELECT ticket_cluster.mark_operational_incidents_notified($1::text[]);", "options": { "queryReplacement": "={{ [$json.incident_keys] }}" } },
+      "id": "f3400000-0000-4000-8000-000000000007",
+      "name": "Mark incidents notified",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1780, 300],
+      "notes": "Attach the existing Postgres credential."
+    }
+  ],
+  "connections": {
+    "Check operational health every five minutes": { "main": [[{ "node": "Refresh operational incidents", "type": "main", "index": 0 }]] },
+    "Refresh operational incidents": { "main": [[{ "node": "List incidents needing notification", "type": "main", "index": 0 }]] },
+    "List incidents needing notification": { "main": [[{ "node": "Build sanitized operations alert", "type": "main", "index": 0 }]] },
+    "Build sanitized operations alert": { "main": [[{ "node": "Notify operations in Slack", "type": "main", "index": 0 }]] },
+    "Notify operations in Slack": { "main": [[{ "node": "Verify operations alert", "type": "main", "index": 0 }]] },
+    "Verify operations alert": { "main": [[{ "node": "Mark incidents notified", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "template": true, "credentialFree": true },
+  "tags": []
+}

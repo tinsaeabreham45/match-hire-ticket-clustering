@@ -27,8 +27,10 @@ The architecture, safety gates, evaluation approach, and operator handoff are do
 - `docs/` — operator runbook, evaluation worksheet, case study, release readiness notes, and SQL schema.
 
 The separate production-hardening branch adds an outbox-backed delivery worker,
-authorized-reviewer checks, and serialized ingestion. Its rollout guide is
-[`docs/production-hardening.md`](docs/production-hardening.md).
+authorized-reviewer checks, serialized ingestion, operational incident capture,
+privacy/retention controls, and staging/deployment tooling. Start with
+[`docs/production-foundation-plan.md`](docs/production-foundation-plan.md),
+then use [`docs/deployment-guide.md`](docs/deployment-guide.md).
 
 ## Run it without technical background
 

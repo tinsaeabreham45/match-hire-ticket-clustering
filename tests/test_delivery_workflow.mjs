@@ -36,6 +36,9 @@ const migration004 = readFileSync('docs/sql/004_delivery_outbox.sql', 'utf8');
 const migration005 = readFileSync('docs/sql/005_review_integrity.sql', 'utf8');
 const migration006 = readFileSync('docs/sql/006_ingestion_serialization.sql', 'utf8');
 const review = readWorkflow('workflows/cluster-review.template.json');
+const core = readWorkflow('workflows/support-ticket-clustering.template.json');
+const errorCapture = readWorkflow('workflows/operational-error-capture.template.json');
+const operationalMonitor = readWorkflow('workflows/operational-monitor.template.json');
 assert.match(migration004, /UNIQUE \(report_draft_id, target\)/);
 assert.match(migration004, /FOR UPDATE SKIP LOCKED/);
 assert.match(migration004, /bool_and\(status = 'succeeded'\)/);
@@ -48,5 +51,20 @@ assert.match(migration006, /status = 'active' AND ticket_count >= verification_t
 const reviewCard = review.nodes.find((node) => node.name === 'Build Slack approval card');
 assert.match(reviewCard.parameters.jsCode, /\*Evidence:\*/);
 assert.match(reviewCard.parameters.jsCode, /ticket_id/);
+
+const normalize = core.nodes.find((node) => node.name === 'Normalize and validate input');
+assert.match(normalize.parameters.jsCode, /REDACTED_EMAIL/);
+assert.match(normalize.parameters.jsCode, /REDACTED_CARD/);
+assert.doesNotMatch(normalize.parameters.jsCode, /original_event/);
+assert(names(errorCapture).has('Sanitize failure metadata'));
+assert(names(operationalMonitor).has('Refresh operational incidents'));
+assert(names(operationalMonitor).has('Mark incidents notified'));
+
+const migration007 = readFileSync('docs/sql/007_operational_observability.sql', 'utf8');
+const migration008 = readFileSync('docs/sql/008_privacy_retention.sql', 'utf8');
+assert.match(migration007, /operational_incidents/);
+assert.match(migration007, /record_workflow_failure/);
+assert.match(migration008, /redact_ticket_before_write/);
+assert.match(migration008, /redact_expired_ticket_content/);
 
 console.log('PASS: production hardening workflow and migration contracts are internally consistent.');

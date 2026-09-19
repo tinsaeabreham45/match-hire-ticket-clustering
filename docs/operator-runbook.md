@@ -7,10 +7,10 @@ Operate the synthetic-ticket clustering demo safely. The support lead owns appro
 ## Pre-flight checklist
 
 1. Confirm the EC2 n8n endpoint is HTTPS-reachable and the Postgres/pgvector service is healthy.
-2. Apply migrations `docs/sql/001_cluster_schema.sql` through `docs/sql/006_ingestion_serialization.sql` in numeric order to staging first; confirm the `ticket_cluster` schema and `vector` extension exist.
+2. Apply migrations `docs/sql/001_cluster_schema.sql` through `docs/sql/008_privacy_retention.sql` in numeric order to staging first; confirm the `ticket_cluster` schema and `vector` extension exist.
 3. In n8n's credential store, add the required integration credentials. Never paste their values into workflow fields, exports, logs, or this repository.
 4. Import all inactive templates in `workflows/`: core intake, cluster review, approval handler, and report-delivery worker. In the core workflow select the imported review sub-workflow by ID; in the approval workflow select the imported delivery worker by ID.
-5. Attach the appropriate Slack, Postgres, Gemini, OpenRouter, Google Docs, and Google Sheets credentials; replace every `REPLACE_WITH_*` configuration value; and configure an error workflow.
+5. Attach the appropriate Slack, Postgres, Gemini, OpenRouter, Google Docs, and Google Sheets credentials; replace every `REPLACE_WITH_*` configuration value; import the operational error-capture workflow; and select it as the Error Workflow for every production workflow.
 6. Confirm Google Docs/Sheets authentication works in this n8n version before enabling their nodes. Document the supported method in the runbook before handoff.
 7. Expose `SLACK_SIGNING_SECRET` only as a server-side n8n environment variable and allow the Code node's built-in `crypto` module. Configure Slack Interactivity to the approval handler's HTTPS production webhook, then test valid, stale, and replayed callbacks.
 8. Insert the support lead's Slack member ID into `ticket_cluster.authorized_approvers`. Do not activate approvals while the allowlist is empty.
@@ -28,6 +28,8 @@ Operate the synthetic-ticket clustering demo safely. The support lead owns appro
 - Review `pending_review` clusters in `#support-triage`; approve only when the evidence ticket IDs support one concrete root cause.
 - Treat `needs_review`, `embedding_failed`, and document-delivery failures as operator work. Reprocess only after fixing the root cause and preserve the original execution record.
 - Monitor n8n error executions and Postgres `workflow_runs`. Errors need an event ID, stage, and operator-facing action; avoid sending full ticket text to general channels.
+- Run `scripts/operator-status.sh` from the server project directory at the beginning of each shift and after any failed external delivery. Review open `operational_incidents`; acknowledge only after assigning an owner and next action.
+- Run `SELECT ticket_cluster.redact_expired_ticket_content();` on the approved retention cadence. Test this against staging first: it permanently removes stored ticket text and ticket embeddings after the retention period.
 - Record every evaluation run in `docs/evaluation.md` or the designated Sheet, including model and threshold versions.
 
 ## Incident handling
@@ -39,6 +41,7 @@ Operate the synthetic-ticket clustering demo safely. The support lead owns appro
 | OpenRouter failure or invalid structured output | Let bounded retries finish; Gemini 2.5 Flash should run once as the fallback. Never send an approval card until a valid structured response passes validation. | Check provider status and the review execution. If Gemini also fails, the cluster remains needs_review; use the operator requeue workflow after recovery rather than creating duplicate tickets. |
 | Slack callback invalid/replayed | Reject the action and retain an audit/error event. | Verify raw-body signature handling and timestamp tolerance. |
 | Docs/Sheets delivery failure | Keep approved payload and notify operator; do not silently drop it. | Retry delivery after fixing integration; update the record. |
+| Operational incident | Use its incident key, execution ID, and target to identify the failed boundary. Do not paste ticket content into operations chat. | Acknowledge with an owner/note, correct the dependency, then requeue only the failed stage. |
 | Secret exposed | Revoke/rotate it immediately and remove it from history/logs as appropriate. | Document the incident without reproducing the secret. |
 
 ## Demo data retention
