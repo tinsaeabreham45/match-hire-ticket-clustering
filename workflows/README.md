@@ -4,10 +4,11 @@ The n8n implementation is split into four inactive, credential-free imports:
 
 1. `support-ticket-clustering.template.json` — Slack ticket intake, validation, Gemini embedding, idempotent seed-anchor assignment, and the sub-workflow call.
 2. cluster-review.template.json — evidence lookup, structured OpenRouter verification/report drafting with Gemini fallback on provider or strict-JSON failure, database persistence, and Slack Block Kit review card.
-3. `approval-handler.template.json` — signed Slack action callback, auditable approve/reject/split decision, Google Doc/Sheet delivery, and post-approval engineering notification.
-4. requeue-cluster-verification.template.json — operator-only manual recovery for a cluster whose prior verification completed in a safe needs_review state.
+3. `approval-handler.template.json` — signed Slack action callback, expected workspace/channel check, authorized approve/reject/split decision, and durable delivery queueing.
+4. `report-delivery.template.json` — one-stage-at-a-time Docs, Sheets, and engineering-Slack outbox worker.
+5. `requeue-cluster-verification.template.json` — operator-only manual recovery for a cluster whose prior verification completed in a safe needs_review state.
 
-Import all three before configuring any credential or activating a workflow.
+Import all production workflows before configuring any credential or activating a workflow.
 
 ## Required configuration
 
@@ -18,15 +19,15 @@ Import all three before configuring any credential or activating a workflow.
 - Replace the `REPLACE_WITH_*` channel, model, Google Sheet, and sub-workflow identifiers after import. These are configuration, not credentials; keep an operator record of them.
 - Configure an n8n error workflow or error trigger for HTTP/429/5xx, database failures, and invalid JSON/embeddings. Its message must name the execution URL and event ID but not expose ticket text unnecessarily.
 - In the core workflow, select the imported **Cluster verification and triage draft** workflow in **Run verification and triage sub-workflow**. It receives the current `cluster_id` item.
-- For the approval handler, expose `SLACK_SIGNING_SECRET` only to the n8n container as a server-side environment variable and permit the built-in `crypto` module for the Code node. Slack's signature cannot be securely checked from a normal HTTP credential field alone.
+- For the approval handler, expose `SLACK_SIGNING_SECRET` only to the n8n container as a server-side environment variable and permit the built-in `crypto` module for the Code node. Slack's signature cannot be securely checked from a normal HTTP credential field alone. Add the support lead to `ticket_cluster.authorized_approvers` before activation.
 - Configure Google Docs/Sheets credentials after confirming this n8n version supports your planned service-account method. Create a `Cluster Log` worksheet with headers before enabling the Sheets node.
 
 ## Safe import order and activation test
 
-1. Apply `001_cluster_schema.sql`. If you applied it before this update, also apply `002_report_drafts.sql`.
-2. Import the three workflows in the order above. Keep all inactive.
+1. Apply SQL migrations `001` through `006` in numeric order to staging first.
+2. Import the workflows in the order above. Keep all inactive.
 3. Add only the plan's placeholder credentials in n8n; attach them to the annotated nodes. Do not send values to this repository or chat.
-4. Set the imported review workflow in the core sub-workflow node, then set Slack Interactivity to the approval handler's **production** webhook URL.
+4. Set the imported review and delivery workflow IDs in their parent nodes, then set Slack Interactivity to the approval handler's **production** webhook URL.
 5. Run TC-01 to TC-03. Confirm a pending Slack review card is created and no engineering alert is posted.
 6. Test an OpenRouter 429/5xx or malformed result: Gemini should produce the verification/report instead. Test both providers unavailable: no approval card or engineering alert may be sent.
 7. Test invalid model JSON, invalid/stale Slack signature, replayed callback, reject, split, and approve. Only then activate the core workflow.

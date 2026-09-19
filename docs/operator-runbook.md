@@ -7,12 +7,13 @@ Operate the synthetic-ticket clustering demo safely. The support lead owns appro
 ## Pre-flight checklist
 
 1. Confirm the EC2 n8n endpoint is HTTPS-reachable and the Postgres/pgvector service is healthy.
-2. Apply `docs/sql/001_cluster_schema.sql` once; confirm the `ticket_cluster` schema and `vector` extension exist.
+2. Apply migrations `docs/sql/001_cluster_schema.sql` through `docs/sql/006_ingestion_serialization.sql` in numeric order to staging first; confirm the `ticket_cluster` schema and `vector` extension exist.
 3. In n8n's credential store, add the required integration credentials. Never paste their values into workflow fields, exports, logs, or this repository.
-4. Import all three inactive templates in `workflows/`: core intake, cluster review, and approval handler. In the core workflow select the imported review sub-workflow by ID.
-5. Attach the appropriate Slack, Postgres, Gemini, and OpenRouter credentials; replace every `REPLACE_WITH_*` configuration value; and configure an error workflow.
+4. Import all inactive templates in `workflows/`: core intake, cluster review, approval handler, and report-delivery worker. In the core workflow select the imported review sub-workflow by ID; in the approval workflow select the imported delivery worker by ID.
+5. Attach the appropriate Slack, Postgres, Gemini, OpenRouter, Google Docs, and Google Sheets credentials; replace every `REPLACE_WITH_*` configuration value; and configure an error workflow.
 6. Confirm Google Docs/Sheets authentication works in this n8n version before enabling their nodes. Document the supported method in the runbook before handoff.
 7. Expose `SLACK_SIGNING_SECRET` only as a server-side n8n environment variable and allow the Code node's built-in `crypto` module. Configure Slack Interactivity to the approval handler's HTTPS production webhook, then test valid, stale, and replayed callbacks.
+8. Insert the support lead's Slack member ID into `ticket_cluster.authorized_approvers`. Do not activate approvals while the allowlist is empty.
 
 ## Dry run then activation
 
@@ -20,6 +21,7 @@ Operate the synthetic-ticket clustering demo safely. The support lead owns appro
 2. In n8n, manually execute a representative event and confirm one row is written to `tickets`, a vector has 768 dimensions, and the cluster seed equals the first ticket vector.
 3. Post TC-01 through TC-03 with `python3 scripts/ticket_simulator.py --post --limit 3`. Confirm no `#eng-alerts` post occurs, even if the verification draft is ready.
 4. Exercise invalid input, invalid LLM JSON, rejected/split action, replayed callback, and approved action. Only after every safe result is recorded may the workflow be activated.
+5. For the hardening branch, test a non-approver action, report-draft mismatch, and failed Docs/Sheets/Slack delivery. Confirm the report remains `delivery_pending` until the outbox worker completes all three stages.
 
 ## Routine operation
 

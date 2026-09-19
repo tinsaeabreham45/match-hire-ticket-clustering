@@ -1,268 +1,93 @@
 {
-  "name": "Slack approval and report delivery (template)",
+  "name": "Slack approval and delivery queue (production template)",
   "nodes": [
     {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "slack-cluster-approval",
-        "responseMode": "onReceived",
-        "options": { "rawBody": true }
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000001",
+      "parameters": { "httpMethod": "POST", "path": "slack-cluster-approval", "responseMode": "onReceived", "options": { "rawBody": true } },
+      "id": "d8100000-0000-4000-8000-000000000001",
       "name": "Slack approval callback",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
-      "position": [240, 300],
-      "notes": "Set Slack Interactivity Request URL to this workflow's production webhook URL. This responds immediately; verification continues asynchronously."
+      "position": [220, 300],
+      "notes": "Set Slack Interactivity to this production webhook. It acknowledges immediately; delivery is asynchronous and durable."
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\nconst input = $input.first();\nconst secret = $env.SLACK_SIGNING_SECRET;\nconst headers = input.json.headers ?? {};\nconst timestamp = String(headers['x-slack-request-timestamp'] ?? '');\nconst signature = String(headers['x-slack-signature'] ?? '');\nconst rawBodyBase64 = input.binary?.data?.data;\nif (!rawBodyBase64) throw new Error('Rejected Slack callback: raw request body unavailable');\nconst raw = Buffer.from(rawBodyBase64, 'base64').toString('utf8');\nif (!secret || !timestamp || !signature || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) throw new Error('Rejected Slack callback: missing/expired signature data');\nconst expected = 'v0=' + crypto.createHmac('sha256', secret).update(`v0:${timestamp}:${raw}`).digest('hex');\nif (expected.length !== signature.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))) throw new Error('Rejected Slack callback: invalid signature');\nconst payloadMatch = raw.match(/(?:^|&)payload=([^&]*)/);\nconst payloadText = payloadMatch ? decodeURIComponent(payloadMatch[1].replace(/\\+/g, ' ')) : '';\nconst payload = JSON.parse(payloadText);\nconst button = payload.actions?.[0];\nconst value = JSON.parse(button?.value ?? '');\nconst actionMap = { approve_cluster: 'approve', reject_cluster: 'reject', split_cluster: 'split' };\nconst action = actionMap[button?.action_id];\nif (!action || !value.cluster_id || !value.report_draft_id || !payload.user?.id || !button.action_ts) throw new Error('Rejected Slack callback: invalid action payload');\nreturn [{ json: { cluster_id: value.cluster_id, report_draft_id: value.report_draft_id, action, actor_id: payload.user.id, callback_id: `${payload.user.id}:${button.action_id}:${button.action_ts}` } }];"
+        "jsCode": "const crypto=require('crypto');\nconst input=$input.first(), headers=input.json.headers??{}, raw64=input.binary?.data?.data;\nconst timestamp=String(headers['x-slack-request-timestamp']??''), signature=String(headers['x-slack-signature']??''), secret=$env.SLACK_SIGNING_SECRET;\nif(!raw64||!secret||!timestamp||!signature||Math.abs(Date.now()/1000-Number(timestamp))>300) throw new Error('Rejected Slack callback: missing, expired, or incomplete signature data');\nconst raw=Buffer.from(raw64,'base64').toString('utf8');\nconst expected='v0='+crypto.createHmac('sha256',secret).update(`v0:${timestamp}:${raw}`).digest('hex');\nif(expected.length!==signature.length||!crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(signature))) throw new Error('Rejected Slack callback: invalid signature');\nconst encoded=(raw.match(/(?:^|&)payload=([^&]*)/)??[])[1];\nconst payload=JSON.parse(encoded?decodeURIComponent(encoded.replace(/\\+/g,' ')):''), button=payload.actions?.[0], value=JSON.parse(button?.value??'');\nconst action={approve_cluster:'approve',reject_cluster:'reject',split_cluster:'split'}[button?.action_id];\nif(!action||!value.cluster_id||!value.report_draft_id||!payload.user?.id||!button.action_ts||!payload.team?.id||!payload.channel?.id) throw new Error('Rejected Slack callback: invalid action payload');\nreturn [{json:{cluster_id:value.cluster_id,report_draft_id:value.report_draft_id,action,actor_id:payload.user.id,workspace_id:payload.team.id,channel_id:payload.channel.id,callback_id:`${payload.user.id}:${button.action_id}:${button.action_ts}`}}];"
       },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000002",
-      "name": "Verify and parse Slack action",
+      "id": "d8100000-0000-4000-8000-000000000002",
+      "name": "Verify signature and parse review decision",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [470, 300],
-      "notes": "Self-hosted n8n must permit the built-in crypto module and expose SLACK_SIGNING_SECRET only as a server-side environment variable. Never place it in this node or an export."
+      "notes": "Requires SLACK_SIGNING_SECRET only as a server-side n8n environment variable and Node built-in crypto access."
+    },
+    {
+      "parameters": {
+        "jsCode": "const expectedWorkspace='REPLACE_WITH_SLACK_WORKSPACE_ID';\nconst expectedChannel='REPLACE_WITH_SUPPORT_TRIAGE_CHANNEL_ID';\nif($json.workspace_id!==expectedWorkspace||$json.channel_id!==expectedChannel) throw new Error('Rejected Slack callback: unexpected workspace or review channel');\nreturn $input.all();"
+      },
+      "id": "d8100000-0000-4000-8000-000000000003",
+      "name": "Validate workspace and triage channel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 300],
+      "notes": "Replace both IDs after import. This prevents a signed button from another workspace or channel being accepted."
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT ticket_cluster.record_review_action($1::uuid, $2, $3, $4, NULL) AS action_status;",
-        "options": { "queryReplacement": "={{ [$json.cluster_id, $json.action, $json.actor_id, $json.callback_id] }}" }
+        "query": "SELECT ticket_cluster.record_review_decision($1::uuid,$2::uuid,$3,$4,$5,$6,$7) AS action_status;",
+        "options": { "queryReplacement": "={{ [$json.cluster_id,$json.report_draft_id,$json.action,$json.actor_id,$json.callback_id,$json.workspace_id,$json.channel_id] }}" }
       },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000003",
-      "name": "Record auditable human decision",
+      "id": "d8100000-0000-4000-8000-000000000004",
+      "name": "Record authorized decision and queue delivery",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [700, 300]
+      "position": [980, 300],
+      "notes": "One database transaction validates the approver, locks the draft and cluster, records the decision, and queues idempotent delivery attempts."
     },
     {
-      "parameters": {
-        "jsCode": "const action = $('Verify and parse Slack action').item.json;\nreturn [{ json: { ...action, action_status: $json.action_status } }];"
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000004",
+      "parameters": { "jsCode": "return [{json:{...$('Validate workspace and triage channel').item.json,action_status:$json.action_status}}];" },
+      "id": "d8100000-0000-4000-8000-000000000005",
       "name": "Rejoin decision context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [930, 300]
+      "position": [1230, 300]
     },
     {
       "parameters": {
         "conditions": {
           "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
-          "conditions": [{ "leftValue": "={{ $json.action_status }}", "rightValue": "approved", "operator": { "type": "string", "operation": "equals" } }],
+          "conditions": [{ "leftValue": "={{ $json.action_status }}", "rightValue": "delivery_queued", "operator": { "type": "string", "operation": "equals" } }],
           "combinator": "and"
         }
       },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000005",
-      "name": "Approved?",
+      "id": "d8100000-0000-4000-8000-000000000006",
+      "name": "Delivery queued?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1160, 300]
+      "position": [1470, 300]
     },
     {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "SELECT id AS report_draft_id, cluster_id, summary, suspected_root_cause, impact, evidence, recommended_next_step FROM ticket_cluster.cluster_report_drafts WHERE id = $1::uuid AND cluster_id = $2::uuid AND status = 'pending_review';",
-        "options": { "queryReplacement": "={{ [$json.report_draft_id, $json.cluster_id] }}" }
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000006",
-      "name": "Load approved draft",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [1390, 180]
-    },
-    {
-      "parameters": {
-        "jsCode": "const r = $json;\nconst document_title = `Support root-cause report — ${r.cluster_id}`;\nconst document_content = `Support ticket root-cause report\\n\\nSummary\\n${r.summary}\\n\\nSuspected root cause\\n${r.suspected_root_cause}\\n\\nImpact\\n${r.impact}\\n\\nEvidence\\n${JSON.stringify(r.evidence, null, 2)}\\n\\nRecommended next step\\n${r.recommended_next_step}\\n\\nApproved via Slack human review.`;\nreturn [{ json: { ...r, document_title, document_content } }];"
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000007",
-      "name": "Format approved report",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [1620, 180]
-    },
-    {
-      "parameters": {
-        "authentication": "oAuth2",
-        "operation": "create",
-        "title": "={{ $json.document_title }}",
-        "driveId": "myDrive",
-        "folderId": ""
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000008",
-      "name": "Create approved Google Doc",
-      "type": "n8n-nodes-base.googleDocs",
-      "typeVersion": 2,
-      "position": [1850, 180],
-      "notes": "Attach the Google Docs OAuth2 credential. Optionally set a shared folder ID."
-    },
-    {
-      "parameters": {
-        "authentication": "oAuth2",
-        "operation": "update",
-        "documentURL": "={{ $json.documentId ?? $json.id }}",
-        "simple": true,
-        "actionsUi": {
-          "actionFields": [
-            {
-              "object": "text",
-              "action": "insert",
-              "locationChoice": "endOfSegmentLocation",
-              "insertSegment": "body",
-              "text": "={{ $('Format approved report').item.json.document_content }}"
-            }
-          ]
-        }
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000008a",
-      "name": "Write approved report content to Google Doc",
-      "type": "n8n-nodes-base.googleDocs",
-      "typeVersion": 2,
-      "position": [1960, 180],
-      "notes": "Google Docs Create only creates the file. This explicit OAuth2 update/insert action writes the generated report body. Attach the same Google Docs credential."
-    },
-    {
-      "parameters": {
-        "authentication": "oAuth2",
-        "operation": "get",
-        "documentURL": "={{ $json.documentId ?? $json.id }}",
-        "simple": true
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000008b",
-      "name": "Verify approved Google Doc content",
-      "type": "n8n-nodes-base.googleDocs",
-      "typeVersion": 2,
-      "position": [2080, 180],
-      "notes": "Read the newly created document back from Google before marking delivery successful. Attach the same Google Docs OAuth2 credential."
-    },
-    {
-      "parameters": {
-        "jsCode": "const report = $('Format approved report').item.json;\nconst doc = $json;\nconst google_doc_id = String(doc.documentId ?? doc.id ?? '');\nif (!google_doc_id) throw new Error('Google Docs verification returned no document ID');\nconst expected = String(report.document_content ?? '').trim();\nconst actual = String(doc.content ?? '').trim();\nif (!actual || !actual.includes(expected.slice(0, 80))) {\n  throw new Error('Google Docs write verification failed: the generated document is empty or does not contain the report text. The report was not marked delivered.');\n}\nconst google_doc_url = `https://docs.google.com/document/d/${google_doc_id}/edit`;\nreturn [{ json: { ...report, google_doc_id, google_doc_url, reviewed_at: new Date().toISOString() } }];"
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000009",
-      "name": "Prepare delivery audit row",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2200, 180]
-    },
-    {
-      "parameters": {
-        "authentication": "serviceAccount",
-        "operation": "append",
-        "documentId": { "__rl": true, "value": "REPLACE_WITH_GOOGLE_SHEET_ID", "mode": "id" },
-        "sheetName": { "__rl": true, "value": "Cluster Log", "mode": "name" },
-        "columns": { "mappingMode": "autoMapInputData", "value": {}, "schema": [] },
-        "options": {}
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000010",
-      "name": "Append approved audit row to Sheets",
-      "type": "n8n-nodes-base.googleSheets",
-      "typeVersion": 4.7,
-      "position": [2430, 180],
-      "notes": "Attach Google Sheets credential and create the header row before enabling. Keep this as an audit/dashboard only; Postgres remains source of truth."
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE ticket_cluster.cluster_report_drafts SET status = 'delivered', google_doc_id = $2, google_doc_url = $3, updated_at = now() WHERE id = $1::uuid; UPDATE ticket_cluster.clusters SET status = 'alerted', alerted_at = now(), updated_at = now() WHERE id = $4::uuid AND status = 'approved';",
-        "options": { "queryReplacement": "={{ [$json.report_draft_id, $json.google_doc_id, $json.google_doc_url, $json.cluster_id] }}" }
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000011",
-      "name": "Mark report delivered and cluster alerted",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [2540, 180]
-    },
-    {
-      "parameters": {
-        "jsCode": "return [{ json: $('Prepare delivery audit row').item.json }];"
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000015",
-      "name": "Rejoin delivery context after Sheets",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2540, 80],
-      "notes": "The Google Sheets node returns its own response, so restore the report identifiers before updating Postgres."
-    },
-    {
-      "parameters": {
-        "jsCode": "const r = $('Prepare delivery audit row').item.json;\nreturn [{ json: { slack_body: { channel: 'REPLACE_WITH_ENGINEERING_ALERTS_CHANNEL_ID', text: `Approved support root-cause alert: ${r.summary} — ${r.google_doc_url}` } } }];"
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000012",
-      "name": "Build engineering alert",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [2770, 180]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://slack.com/api/chat.postMessage",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
-        "sendBody": true,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "={{ JSON.stringify($json.slack_body) }}",
-        "options": { "timeout": 15000, "retry": { "maxTries": 2, "waitBetweenTries": 1000 } }
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000013",
-      "name": "Notify engineering after approval",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [3000, 180],
-      "notes": "Attach HTTP Header Auth using SLACK_BOT_TOKEN as Authorization: Bearer. This node is reachable only after a recorded approve action and successful document/audit delivery."
-    },
-    {
-      "parameters": {
-        "jsCode": "if ($json.ok !== true) {\n  throw new Error(`Engineering Slack alert was rejected: ${$json.error ?? 'unknown Slack error'}`);\n}\nreturn $input.all();"
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000013a",
-      "name": "Verify engineering alert delivered",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [3230, 180],
-      "notes": "Fail visibly if Slack returns ok: false instead of treating an API-level rejection as success."
-    },
-    {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "UPDATE ticket_cluster.cluster_report_drafts SET status = CASE WHEN $2 = 'reject' THEN 'rejected' WHEN $2 = 'split' THEN 'split' ELSE status END, updated_at = now() WHERE id = $1::uuid;",
-        "options": { "queryReplacement": "={{ [$json.report_draft_id, $json.action] }}" }
-      },
-      "id": "c5066b52-1cc4-46d5-8b23-000000000014",
-      "name": "Close rejected or split draft",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [1390, 440]
+      "parameters": { "workflowId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_IMPORTED_REPORT_DELIVERY_WORKFLOW_ID" }, "options": {} },
+      "id": "d8100000-0000-4000-8000-000000000007",
+      "name": "Run queued delivery worker",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [1710, 180],
+      "notes": "Select the imported report-delivery workflow. The worker claims one durable stage at a time and may be safely re-run."
     }
   ],
   "connections": {
-    "Slack approval callback": { "main": [[{ "node": "Verify and parse Slack action", "type": "main", "index": 0 }]] },
-    "Verify and parse Slack action": { "main": [[{ "node": "Record auditable human decision", "type": "main", "index": 0 }]] },
-    "Record auditable human decision": { "main": [[{ "node": "Rejoin decision context", "type": "main", "index": 0 }]] },
-    "Rejoin decision context": { "main": [[{ "node": "Approved?", "type": "main", "index": 0 }]] },
-    "Approved?": { "main": [[{ "node": "Load approved draft", "type": "main", "index": 0 }], [{ "node": "Close rejected or split draft", "type": "main", "index": 0 }]] },
-    "Load approved draft": { "main": [[{ "node": "Format approved report", "type": "main", "index": 0 }]] },
-    "Format approved report": { "main": [[{ "node": "Create approved Google Doc", "type": "main", "index": 0 }]] },
-    "Create approved Google Doc": { "main": [[{ "node": "Write approved report content to Google Doc", "type": "main", "index": 0 }]] },
-    "Write approved report content to Google Doc": { "main": [[{ "node": "Verify approved Google Doc content", "type": "main", "index": 0 }]] },
-    "Verify approved Google Doc content": { "main": [[{ "node": "Prepare delivery audit row", "type": "main", "index": 0 }]] },
-    "Prepare delivery audit row": { "main": [[{ "node": "Append approved audit row to Sheets", "type": "main", "index": 0 }]] },
-    "Append approved audit row to Sheets": { "main": [[{ "node": "Rejoin delivery context after Sheets", "type": "main", "index": 0 }]] },
-    "Rejoin delivery context after Sheets": { "main": [[{ "node": "Mark report delivered and cluster alerted", "type": "main", "index": 0 }]] },
-    "Mark report delivered and cluster alerted": { "main": [[{ "node": "Build engineering alert", "type": "main", "index": 0 }]] },
-    "Build engineering alert": { "main": [[{ "node": "Notify engineering after approval", "type": "main", "index": 0 }]] },
-    "Notify engineering after approval": { "main": [[{ "node": "Verify engineering alert delivered", "type": "main", "index": 0 }]] }
+    "Slack approval callback": { "main": [[{ "node": "Verify signature and parse review decision", "type": "main", "index": 0 }]] },
+    "Verify signature and parse review decision": { "main": [[{ "node": "Validate workspace and triage channel", "type": "main", "index": 0 }]] },
+    "Validate workspace and triage channel": { "main": [[{ "node": "Record authorized decision and queue delivery", "type": "main", "index": 0 }]] },
+    "Record authorized decision and queue delivery": { "main": [[{ "node": "Rejoin decision context", "type": "main", "index": 0 }]] },
+    "Rejoin decision context": { "main": [[{ "node": "Delivery queued?", "type": "main", "index": 0 }]] },
+    "Delivery queued?": { "main": [[{ "node": "Run queued delivery worker", "type": "main", "index": 0 }], []] }
   },
   "pinData": {},
   "active": false,
   "settings": { "executionOrder": "v1" },
-  "meta": { "template": true, "credentialFree": true },
+  "meta": { "template": true, "credentialFree": true, "hardening": "approval is atomic; external delivery is outbox-backed" },
   "tags": []
 }
