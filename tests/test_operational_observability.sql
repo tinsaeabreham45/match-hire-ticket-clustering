@@ -8,6 +8,8 @@ DECLARE
   v_key text;
   v_count integer;
 BEGIN
+  PERFORM * FROM refresh_operational_incidents();
+
   PERFORM record_workflow_failure('workflow-test', 'execution-test-007', 'Synthetic node', 'Synthetic provider timeout');
   SELECT incident_key INTO v_key
   FROM list_operational_incidents_to_notify(interval '1 hour')

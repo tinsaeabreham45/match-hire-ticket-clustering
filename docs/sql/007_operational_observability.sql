@@ -96,7 +96,7 @@ BEGIN
       incident_key, kind, severity, reference_id, message, context
     )
     SELECT c.incident_key, c.kind, c.severity, c.reference_id, c.message, c.context FROM candidates c
-    ON CONFLICT (incident_key) DO UPDATE
+    ON CONFLICT ON CONSTRAINT operational_incidents_pkey DO UPDATE
       SET kind = EXCLUDED.kind, severity = EXCLUDED.severity, status = 'open',
           last_seen_at = now(), message = EXCLUDED.message, context = EXCLUDED.context
     RETURNING operational_incidents.incident_key, operational_incidents.kind,
