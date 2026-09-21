@@ -75,6 +75,7 @@ const migration007 = readFileSync('docs/sql/007_operational_observability.sql', 
 const migration008 = readFileSync('docs/sql/008_privacy_retention.sql', 'utf8');
 const migration009 = readFileSync('docs/sql/009_recurrence_episodes.sql', 'utf8');
 const migration010 = readFileSync('docs/sql/010_pilot_readiness_gates.sql', 'utf8');
+const migration011 = readFileSync('docs/sql/011_incident_lifecycle.sql', 'utf8');
 assert.match(migration007, /operational_incidents/);
 assert.match(migration007, /record_workflow_failure/);
 assert.match(migration007, /severity = 'error' AND notified_at/);
@@ -89,6 +90,10 @@ assert.match(migration009, /status = 'alerted'/);
 assert.match(migration010, /DROP FUNCTION IF EXISTS record_review_action/);
 assert.match(migration010, /ignored_wrong_state/);
 assert.match(migration010, /verification_stuck/);
+assert.match(migration011, /verification_attention/);
+assert.match(migration011, /status = 'resolved'/);
+assert.match(migration011, /c\.status = 'verification_pending'/);
+assert.match(migration011, /c\.status = 'needs_review'/);
 
 const coreWorkflow = JSON.parse(readFileSync('workflows/support-ticket-clustering.template.json', 'utf8'));
 const normalizeInput = coreWorkflow.nodes.find((node) => node.name === 'Normalize and validate input');

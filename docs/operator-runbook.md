@@ -7,7 +7,7 @@ Operate the synthetic-ticket clustering demo safely. The support lead owns appro
 ## Pre-flight checklist
 
 1. Confirm the EC2 n8n endpoint is HTTPS-reachable and the Postgres/pgvector service is healthy.
-2. Apply migrations `docs/sql/001_cluster_schema.sql` through `docs/sql/010_pilot_readiness_gates.sql` in numeric order to staging first; confirm the `ticket_cluster` schema and `vector` extension exist.
+2. Apply migrations `docs/sql/001_cluster_schema.sql` through `docs/sql/011_incident_lifecycle.sql` in numeric order to staging first; confirm the `ticket_cluster` schema and `vector` extension exist.
 3. In n8n's credential store, add the required integration credentials. Never paste their values into workflow fields, exports, logs, or this repository.
 4. Import all inactive templates in `workflows/`: core intake, cluster review, approval handler, and report-delivery worker. In the core workflow select the imported review sub-workflow by ID; in the approval workflow select the imported delivery worker by ID.
 5. Attach the appropriate Slack, Postgres, Gemini, OpenRouter, Google Docs, and Google Sheets credentials; replace every `REPLACE_WITH_*` configuration value; import the operational error-capture workflow; and select it as the Error Workflow for every production workflow.
@@ -31,6 +31,7 @@ Operate the synthetic-ticket clustering demo safely. The support lead owns appro
 - Run `scripts/operator-status.sh` from the server project directory at the beginning of each shift and after any failed external delivery. Review open `operational_incidents`; acknowledge only after assigning an owner and next action.
 - Run `SELECT ticket_cluster.redact_expired_ticket_content();` on the approved retention cadence. Test this against staging first: it permanently removes stored ticket text and ticket embeddings after the retention period.
 - Treat each recurrence episode as a new review boundary. Episode 1 reports remain immutable; after the configured cooldown, a matching issue opens the next linked episode and must independently cross the review threshold.
+- Treat `verification_attention` as a one-time operator warning for a valid low-confidence `needs_review` result. A repeating `verification_stuck` error means no model decision was recorded and requires workflow recovery.
 - Record every evaluation run in `docs/evaluation.md` or the designated Sheet, including model and threshold versions.
 
 ## Incident handling
