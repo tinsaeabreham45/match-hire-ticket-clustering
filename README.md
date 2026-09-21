@@ -15,7 +15,7 @@ The architecture, safety gates, evaluation approach, and operator handoff are do
 
 ## Three-step setup
 
-1. On the EC2 Postgres/pgvector service, apply [`docs/sql/001_cluster_schema.sql`](docs/sql/001_cluster_schema.sql). This is destructive only if you deliberately run its optional reset block (not included).
+1. On an isolated staging database in the EC2 Postgres/pgvector service, run `scripts/apply-migrations.sh DATABASE_NAME`. It applies the ordered migrations under `docs/sql/`; promote them to the live database only after the staging checks pass.
 2. In n8n, import the workflow templates from `workflows/`, attach the required credentials, set channel/model/Google identifiers and the review sub-workflow ID, then activate only after the dry-run checks in the runbook pass.
 3. Copy `.env.example` to an untracked `.env`; run `python3 scripts/ticket_simulator.py --dry-run` first, then run it with `--post` after setting the Slack token and support-channel ID.
 
@@ -26,9 +26,9 @@ The architecture, safety gates, evaluation approach, and operator handoff are do
 - `data/` — fixed 11-case evaluation input.
 - `docs/` — operator runbook, evaluation worksheet, case study, release readiness notes, and SQL schema.
 
-The separate production-hardening branch adds an outbox-backed delivery worker,
+The production-ready feature branches add an outbox-backed delivery worker,
 authorized-reviewer checks, serialized ingestion, operational incident capture,
-privacy/retention controls, and staging/deployment tooling. Start with
+privacy/retention controls, linked recurrence episodes, and staging/deployment tooling. Start with
 [`docs/production-foundation-plan.md`](docs/production-foundation-plan.md),
 then use [`docs/deployment-guide.md`](docs/deployment-guide.md).
 

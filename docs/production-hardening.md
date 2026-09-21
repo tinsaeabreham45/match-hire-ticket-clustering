@@ -13,6 +13,7 @@ not deployed to the live server by default.
 | Simultaneous tickets race cluster assignment | A transaction-scoped PostgreSQL advisory lock serializes assignment per embedding model. |
 | A workflow failure is invisible or repeated | A sanitized incident ledger, rate-limited operations alerts, and an acknowledgement trail make failures reviewable. |
 | Ticket text retains common PII indefinitely | Write-time redaction removes common email, phone, and card patterns before persistence or embedding; a retention job later removes remaining ticket content. |
+| A root cause returns after its original report was delivered | A cooldown opens a linked recurrence episode without mutating the original report; the new episode must independently reach the human-review threshold. |
 
 ## Migration order
 
@@ -26,6 +27,7 @@ Apply these once, in order, to an isolated staging database first:
 6. `006_ingestion_serialization.sql`
 7. `007_operational_observability.sql`
 8. `008_privacy_retention.sql`
+9. `009_recurrence_episodes.sql`
 
 Migration `005` creates an empty approver allowlist. Before enabling the
 approval workflow, add the support lead's Slack member ID and the existing
@@ -66,6 +68,15 @@ The report becomes `delivered` and the cluster becomes `alerted` only after
 stage three succeeds. If a worker stops before a checkpoint, the lease expires
 after 15 minutes and the stage becomes eligible for retry. This deliberately
 favors manual reconciliation over rapid duplicate external writes.
+
+## Recurrence behavior
+
+An alerted cluster remains immutable. A similar ticket received within that
+cluster's cooldown stays attached to the current incident window. A similar
+ticket received after the default 24-hour cooldown opens the next linked
+episode. The episode inherits the original thresholds, must independently
+reach verification and human approval, and records its previous episode,
+recurrence group, episode number, and similarity for audit.
 
 ## Required staging tests
 

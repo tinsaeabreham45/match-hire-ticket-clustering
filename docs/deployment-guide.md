@@ -68,6 +68,8 @@ docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < 
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_outbox_state_machine.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_operational_observability.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_privacy_retention.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_recurrence_episodes.sql
+docker compose exec -T -e TEST_DATABASE_URL=postgresql://n8n@localhost/n8n_staging postgres bash -s < tests/test_ingestion_concurrency.sh
 ```
 
 Only promote after the approval callback, Docs, Sheets, engineering alert,
