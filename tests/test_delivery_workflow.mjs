@@ -74,6 +74,7 @@ assert(names(operationalMonitor).has('Mark incidents notified'));
 const migration007 = readFileSync('docs/sql/007_operational_observability.sql', 'utf8');
 const migration008 = readFileSync('docs/sql/008_privacy_retention.sql', 'utf8');
 const migration009 = readFileSync('docs/sql/009_recurrence_episodes.sql', 'utf8');
+const migration010 = readFileSync('docs/sql/010_pilot_readiness_gates.sql', 'utf8');
 assert.match(migration007, /operational_incidents/);
 assert.match(migration007, /record_workflow_failure/);
 assert.match(migration007, /severity = 'error' AND notified_at/);
@@ -85,5 +86,27 @@ assert.match(migration009, /recurrence_group_id/);
 assert.match(migration009, /previous_episode_id/);
 assert.match(migration009, /v_disposition := 'new_episode'/);
 assert.match(migration009, /status = 'alerted'/);
+assert.match(migration010, /DROP FUNCTION IF EXISTS record_review_action/);
+assert.match(migration010, /ignored_wrong_state/);
+assert.match(migration010, /verification_stuck/);
+
+const coreWorkflow = JSON.parse(readFileSync('workflows/support-ticket-clustering.template.json', 'utf8'));
+const normalizeInput = coreWorkflow.nodes.find((node) => node.name === 'Normalize and validate input');
+assert.match(normalizeInput.parameters.jsCode, /REPLACE_WITH_SUPPORT_TICKETS_CHANNEL_ID/);
+assert.match(normalizeInput.parameters.jsCode, /if \(sourceChannel !== allowedChannel\) return \[\]/);
+
+const setupGuide = readFileSync('docs/n8n-ui-setup.md', 'utf8');
+for (const workflowFile of [
+  'operational-error-capture.template.json',
+  'operational-monitor.template.json',
+  'report-delivery.template.json',
+  'approval-handler.template.json',
+  'cluster-review.template.json',
+  'requeue-cluster-verification.template.json',
+  'support-ticket-clustering.template.json',
+]) assert.match(setupGuide, new RegExp(workflowFile.replaceAll('.', '\\.'), 'u'));
+assert.doesNotMatch(setupGuide, /16\.170\.93\.79/);
+assert.doesNotMatch(setupGuide, /Notify engineering after approval/);
+assert.doesNotMatch(setupGuide, /Record auditable human decision/);
 
 console.log('PASS: production hardening workflow and migration contracts are internally consistent.');

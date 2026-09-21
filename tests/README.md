@@ -11,6 +11,7 @@ psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_outbox_state_machine.
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_operational_observability.sql
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_privacy_retention.sql
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_recurrence_episodes.sql
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_pilot_readiness_gates.sql
 bash tests/test_ingestion_concurrency.sh
 ```
 

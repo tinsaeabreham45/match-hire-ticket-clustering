@@ -4,18 +4,23 @@ Keep all workflows **inactive** until the final test section passes. Never paste
 
 ## 1. Import the workflows
 
-At `https://16.170.93.79.nip.io`:
+At the private n8n operator URL supplied out-of-band by the system owner:
 
 1. Sign in as the n8n owner.
 2. In the left navigation, select **Workflows**.
 3. Select the arrow beside **Create Workflow** (or the `…` menu) and choose **Import from File**.
 4. Import, one at a time and in this exact order:
-   - `workflows/cluster-review.template.json`
+   - `workflows/operational-error-capture.template.json`
+   - `workflows/operational-monitor.template.json`
+   - `workflows/report-delivery.template.json`
    - `workflows/approval-handler.template.json`
+   - `workflows/cluster-review.template.json`
    - `workflows/requeue-cluster-verification.template.json`
    - `workflows/support-ticket-clustering.template.json`
 5. For each import, keep the top-right **Active/Published** switch off and select **Save**.
-6. Return to the core workflow. Click **Run verification and triage sub-workflow**. In **Workflow**, select the imported workflow named **Cluster verification and triage draft (template)**. Save.
+6. In the approval workflow, click **Run queued delivery worker** and select the imported **Report delivery outbox worker (production template)**.
+7. In both the core and requeue workflows, select **Cluster verification and triage draft (template)** in their Execute Sub-workflow node.
+8. In every production workflow's **Settings**, select **Operational error capture (production template)** as the Error Workflow. Save all workflows.
 
 The core must be imported last because it references the review workflow by its n8n workflow ID.
 
@@ -25,11 +30,11 @@ Create credentials from the specific node that will consume them: click the node
 
 | Credential label to use | Credential type and fields | Attach to nodes |
 |---|---|---|
-| `SLACK_BOT_TOKEN` | For **Slack ticket received**, create the Slack credential offered by that node and enter the bot token. For HTTP Request Slack posts, create **Header Auth**: header `Authorization`, value `Bearer <rotated bot token>`. | Core: `Slack ticket received`. Review: `Post human approval card`. Approval: `Notify engineering after approval`. |
+| `SLACK_BOT_TOKEN` | For **Slack ticket received**, create the Slack credential offered by that node and enter the bot token. For HTTP Request Slack posts/updates, create **Header Auth**: header `Authorization`, value `Bearer <rotated bot token>`. | Core: `Slack ticket received`. Review: `Post human approval card`. Approval: `Disable reviewed Slack card`. Delivery: `Notify engineering`. Monitor: `Notify operations in Slack`. |
 | `GEMINI_API_KEY` | **Header Auth**: header `x-goog-api-key`, value is the Gemini API key. | Core: `Embed ticket with Gemini`. Review: Verify root cause with Gemini fallback; Draft report with Gemini fallback. |
 | `OPENROUTER_API_KEY` | **Header Auth**: header `Authorization`, value `Bearer <OpenRouter key>`. | Review: `Verify root cause with OpenRouter`; `Draft report with OpenRouter`. |
-| `POSTGRES_PASSWORD` | The **Postgres** credential offered by a Postgres node. Use host `postgres` (inside Compose), port `5432`, database `n8n`, user `n8n`, and the existing password. | Core: `Assign seed-anchored cluster`, `Record invalid ticket`. Review: `Load cluster evidence`, `Persist verification`, `Persist pending report draft`. Approval: `Record auditable human decision`, `Load approved draft`, `Mark report delivered and cluster alerted`, `Close rejected or split draft`. |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Choose **Google Service Account API** in the Google Docs and Google Sheets node credential selector. In the JSON key, use `client_email` as Service Account Email and `private_key` as Private Key. Enable Google Docs API, Google Sheets API, and Google Drive API; share the target Sheet/folder with the service-account email. | Approval: `Create approved Google Doc`; `Append approved audit row to Sheets`. |
+| `POSTGRES_PASSWORD` | The **Postgres** credential offered by a Postgres node. Use host `postgres` (inside Compose), port `5432`, database `n8n`, user `n8n`, and the existing password. | Core: `Assign seed-anchored cluster`, `Record invalid ticket`. Review: `Load cluster evidence`, `Persist verification`, `Persist pending report draft`. Approval: `Record authorized decision and queue delivery`. Delivery: claim/checkpoint nodes. Monitor/error capture: all Postgres nodes. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Use the Google credential type offered by the imported Google Docs/Sheets nodes (OAuth2 may be required by the installed n8n version). Enable Google Docs, Sheets, and Drive APIs, and grant that identity access to the approved destination. | Delivery: `Create approved Google Doc`, `Write approved report content`, `Verify Google Doc content`, `Append approved audit row to Sheets`. |
 
 `SLACK_SIGNING_SECRET` is not attached to a node credential: it must be a server-side n8n container environment variable because the approval callback validates an HMAC over the raw HTTP body. Also set `NODE_FUNCTION_ALLOW_BUILTIN=crypto` in the n8n service environment. Do not enter either value in workflow JSON or a Code node.
 
@@ -38,11 +43,15 @@ Create credentials from the specific node that will consume them: click the node
 | Placeholder | Where | Exact value and how to obtain it |
 |---|---|---|
 | `REPLACE_WITH_IMPORTED_CLUSTER_REVIEW_WORKFLOW_ID` | Core → `Run verification and triage sub-workflow` | Do not type an ID. Click the node and select **Cluster verification and triage draft (template)** from the workflow picker. |
+| `REPLACE_WITH_IMPORTED_REPORT_DELIVERY_WORKFLOW_ID` | Approval → `Run queued delivery worker` | Select **Report delivery outbox worker (production template)** from the workflow picker. |
+| `REPLACE_WITH_SUPPORT_TICKETS_CHANNEL_ID` | Core → `Normalize and validate input` | Copy the ID of the one approved support-ticket channel. Messages from every other channel stop before persistence and embedding. |
 | `REPLACE_WITH_OPENROUTER_VERIFICATION_MODEL` | Review → `Build verification request` Code node | Replace with the OpenRouter model slug you selected for verification, for example a low-cost JSON-capable model slug shown in your OpenRouter Models page. Use the exact slug, not its display name. |
 | `REPLACE_WITH_OPENROUTER_REPORT_MODEL` | Review → `Build report request` Code node | Replace with the selected JSON-capable report-drafting model slug. It may be the same as verification. |
 | `REPLACE_WITH_SUPPORT_TRIAGE_CHANNEL_ID` | Review → `Build Slack approval card` Code node | Slack desktop/web: open `#support-triage` → click the channel name → scroll to the bottom of **About** → copy **Channel ID**. Paste the ID, not `#support-triage`. |
-| `REPLACE_WITH_GOOGLE_SHEET_ID` | Approval → `Append approved audit row to Sheets` | Open the target Sheet. Copy the part between `/d/` and `/edit` in its URL. Create a tab named `Cluster Log` with headers matching the fields passed by `Prepare delivery audit row`, then refresh the node’s column mapping. |
-| `REPLACE_WITH_ENGINEERING_ALERTS_CHANNEL_ID` | Approval → `Build engineering alert` Code node | Slack: open `#eng-alerts` → channel name → **About** → copy **Channel ID**. Paste the ID, not the channel name. |
+| `REPLACE_WITH_SLACK_WORKSPACE_ID` | Approval → `Validate workspace and triage channel` | Copy the Slack workspace/team ID from the callback payload or workspace details. |
+| `REPLACE_WITH_GOOGLE_SHEET_ID` | Delivery → `Append approved audit row to Sheets` | Open the target Sheet. Copy the part between `/d/` and `/edit` in its URL. Create a tab named `Cluster Log` with the documented headers, then refresh the node’s column mapping. |
+| `REPLACE_WITH_ENGINEERING_ALERTS_CHANNEL_ID` | Delivery → `Build engineering alert` Code node | Slack: open `#eng-alerts` → channel name → **About** → copy **Channel ID**. Paste the ID, not the channel name. |
+| `REPLACE_WITH_OPERATIONS_CHANNEL_ID` | Monitor → `Build sanitized operations alert` | Copy the ID of the restricted operations-alert channel. |
 | REPLACE_WITH_CLUSTER_ID_TO_REQUEUE | Requeue workflow → Set cluster to requeue Code node | Only when recovering a completed provider failure: query the cluster ID in Postgres or copy it from the review execution. Replace the UUID, run manually, then restore the placeholder before saving. |
 
 You may provide only these non-secret IDs/model slugs in chat if you want the JSON edited before importing. Do not provide any token, private key, password, or signing secret.
@@ -61,7 +70,7 @@ You may provide only these non-secret IDs/model slugs in chat if you want the JS
 
 1. Open the imported **Slack approval and report delivery (template)** workflow.
 2. Click `Slack approval callback`. The path is `slack-cluster-approval`.
-3. Save the workflow. Its production URL is `https://16.170.93.79.nip.io/webhook/slack-cluster-approval` (do not use the `/webhook-test/` URL).
+3. Save the workflow. Copy the **Production URL** shown by n8n (ending in `/webhook/slack-cluster-approval`); never publish the host or full URL in repository documentation. Do not use `/webhook-test/`.
 4. In Slack app configuration → **Interactivity & Shortcuts**, turn **Interactivity** on.
 5. Paste that production URL into **Request URL**, select **Save Changes**, and reinstall the app if prompted.
 

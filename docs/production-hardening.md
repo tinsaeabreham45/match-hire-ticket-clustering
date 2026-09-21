@@ -28,6 +28,7 @@ Apply these once, in order, to an isolated staging database first:
 7. `007_operational_observability.sql`
 8. `008_privacy_retention.sql`
 9. `009_recurrence_episodes.sql`
+10. `010_pilot_readiness_gates.sql`
 
 Migration `005` creates an empty approver allowlist. Before enabling the
 approval workflow, add the support lead's Slack member ID and the existing

@@ -7,7 +7,7 @@ Operate the synthetic-ticket clustering demo safely. The support lead owns appro
 ## Pre-flight checklist
 
 1. Confirm the EC2 n8n endpoint is HTTPS-reachable and the Postgres/pgvector service is healthy.
-2. Apply migrations `docs/sql/001_cluster_schema.sql` through `docs/sql/009_recurrence_episodes.sql` in numeric order to staging first; confirm the `ticket_cluster` schema and `vector` extension exist.
+2. Apply migrations `docs/sql/001_cluster_schema.sql` through `docs/sql/010_pilot_readiness_gates.sql` in numeric order to staging first; confirm the `ticket_cluster` schema and `vector` extension exist.
 3. In n8n's credential store, add the required integration credentials. Never paste their values into workflow fields, exports, logs, or this repository.
 4. Import all inactive templates in `workflows/`: core intake, cluster review, approval handler, and report-delivery worker. In the core workflow select the imported review sub-workflow by ID; in the approval workflow select the imported delivery worker by ID.
 5. Attach the appropriate Slack, Postgres, Gemini, OpenRouter, Google Docs, and Google Sheets credentials; replace every `REPLACE_WITH_*` configuration value; import the operational error-capture workflow; and select it as the Error Workflow for every production workflow.

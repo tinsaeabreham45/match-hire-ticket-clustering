@@ -49,7 +49,7 @@ This shows the exact synthetic support tickets that would be sent. It changes no
 
 ### Option B — operate the live demo
 
-The live workflow editor is [https://16.170.93.79.nip.io](https://16.170.93.79.nip.io). It is an **operator console**, not a public demo: it requires an authorised n8n account, access to the project Slack workspace, and configured credentials. A support lead uses it as follows:
+The live workflow editor is an **operator console**, not a public demo. Its private URL is provided to authorised operators out-of-band; it requires an authorised n8n account, access to the project Slack workspace, and configured credentials. A support lead uses it as follows:
 
 1. Sign in to n8n at the link above.
 2. Open **Executions** to see incoming support-ticket runs and any errors.
