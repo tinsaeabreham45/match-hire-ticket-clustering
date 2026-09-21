@@ -13,7 +13,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const crypto=require('crypto');\nconst input=$input.first(), headers=input.json.headers??{}, raw64=input.binary?.data?.data;\nconst timestamp=String(headers['x-slack-request-timestamp']??''), signature=String(headers['x-slack-signature']??''), secret=$env.SLACK_SIGNING_SECRET;\nif(!raw64||!secret||!timestamp||!signature||Math.abs(Date.now()/1000-Number(timestamp))>300) throw new Error('Rejected Slack callback: missing, expired, or incomplete signature data');\nconst raw=Buffer.from(raw64,'base64').toString('utf8');\nconst expected='v0='+crypto.createHmac('sha256',secret).update(`v0:${timestamp}:${raw}`).digest('hex');\nif(expected.length!==signature.length||!crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(signature))) throw new Error('Rejected Slack callback: invalid signature');\nconst encoded=(raw.match(/(?:^|&)payload=([^&]*)/)??[])[1];\nconst payload=JSON.parse(encoded?decodeURIComponent(encoded.replace(/\\+/g,' ')):''), button=payload.actions?.[0], value=JSON.parse(button?.value??'');\nconst action={approve_cluster:'approve',reject_cluster:'reject',split_cluster:'split'}[button?.action_id];\nif(!action||!value.cluster_id||!value.report_draft_id||!payload.user?.id||!button.action_ts||!payload.team?.id||!payload.channel?.id) throw new Error('Rejected Slack callback: invalid action payload');\nreturn [{json:{cluster_id:value.cluster_id,report_draft_id:value.report_draft_id,action,actor_id:payload.user.id,workspace_id:payload.team.id,channel_id:payload.channel.id,callback_id:`${payload.user.id}:${button.action_id}:${button.action_ts}`}}];"
+        "jsCode": "const crypto=require('crypto');\nconst input=$input.first(), headers=input.json.headers??{}, raw64=input.binary?.data?.data;\nconst timestamp=String(headers['x-slack-request-timestamp']??''), signature=String(headers['x-slack-signature']??''), secret=$env.SLACK_SIGNING_SECRET;\nif(!raw64||!secret||!timestamp||!signature||Math.abs(Date.now()/1000-Number(timestamp))>300) throw new Error('Rejected Slack callback: missing, expired, or incomplete signature data');\nconst raw=Buffer.from(raw64,'base64').toString('utf8');\nconst expected='v0='+crypto.createHmac('sha256',secret).update(`v0:${timestamp}:${raw}`).digest('hex');\nif(expected.length!==signature.length||!crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(signature))) throw new Error('Rejected Slack callback: invalid signature');\nconst encoded=(raw.match(/(?:^|&)payload=([^&]*)/)??[])[1];\nconst payload=JSON.parse(encoded?decodeURIComponent(encoded.replace(/\\+/g,' ')):''), button=payload.actions?.[0], value=JSON.parse(button?.value??'');\nconst action={approve_cluster:'approve',reject_cluster:'reject',split_cluster:'split'}[button?.action_id];\nconst messageTs=String(payload.message?.ts??payload.container?.message_ts??'');\nif(!action||!value.cluster_id||!value.report_draft_id||!payload.user?.id||!button.action_ts||!payload.team?.id||!payload.channel?.id||!messageTs) throw new Error('Rejected Slack callback: invalid action payload');\nreturn [{json:{cluster_id:value.cluster_id,report_draft_id:value.report_draft_id,action,actor_id:payload.user.id,workspace_id:payload.team.id,channel_id:payload.channel.id,callback_id:`${payload.user.id}:${button.action_id}:${button.action_ts}`,message_ts:messageTs,message_text:String(payload.message?.text??'Root-cause review'),message_blocks:Array.isArray(payload.message?.blocks)?payload.message.blocks:[]}}];"
       },
       "id": "d8100000-0000-4000-8000-000000000002",
       "name": "Verify signature and parse review decision",
@@ -56,6 +56,48 @@
     },
     {
       "parameters": {
+        "jsCode": "const allowed=new Set(['delivery_queued','rejected','split','ignored_not_pending','duplicate_callback']);\nif(!allowed.has($json.action_status))return[];\nconst labels={delivery_queued:'Approved',rejected:'Rejected',split:'Split requested',ignored_not_pending:'Already processed',duplicate_callback:'Already processed'};\nconst icons={delivery_queued:'✅',rejected:'❌',split:'🔀',ignored_not_pending:'ℹ️',duplicate_callback:'ℹ️'};\nconst blocks=($json.message_blocks??[]).filter(block=>block.type!=='actions');\nblocks.push({type:'context',elements:[{type:'mrkdwn',text:`${icons[$json.action_status]} *${labels[$json.action_status]}* by <@${$json.actor_id}>`} ]});\nreturn[{json:{...$json,slack_body:{channel:$json.channel_id,ts:$json.message_ts,text:`Root-cause review — ${labels[$json.action_status]}`,blocks}}}];"
+      },
+      "id": "d8100000-0000-4000-8000-000000000008",
+      "name": "Build finalized Slack card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1470, 300],
+      "notes": "Removes action blocks only after an accepted or already-processed decision. Denied or tampered actions leave the card available to an authorized reviewer."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.update",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "Content-Type", "value": "application/json" }] },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.slack_body) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "d8100000-0000-4000-8000-000000000009",
+      "name": "Disable reviewed Slack card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1710, 300],
+      "notes": "Attach the existing Slack API credential. chat.update removes buttons from only the reviewed message timestamp."
+    },
+    {
+      "parameters": {
+        "jsCode": "if($json.ok!==true)throw new Error(`Slack card update rejected: ${$json.error??'unknown error'}`);return[{json:$('Build finalized Slack card').item.json}];"
+      },
+      "id": "d8100000-0000-4000-8000-000000000010",
+      "name": "Verify reviewed card disabled",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1950, 300]
+    },
+    {
+      "parameters": {
         "conditions": {
           "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
           "conditions": [{ "leftValue": "={{ $json.action_status }}", "rightValue": "delivery_queued", "operator": { "type": "string", "operation": "equals" } }],
@@ -66,7 +108,7 @@
       "name": "Delivery queued?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1470, 300]
+      "position": [2190, 300]
     },
     {
       "parameters": { "workflowId": { "__rl": true, "mode": "id", "value": "REPLACE_WITH_IMPORTED_REPORT_DELIVERY_WORKFLOW_ID" }, "options": {} },
@@ -74,7 +116,7 @@
       "name": "Run queued delivery worker",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1.2,
-      "position": [1710, 180],
+      "position": [2430, 180],
       "notes": "Select the imported report-delivery workflow. The worker claims one durable stage at a time and may be safely re-run."
     }
   ],
@@ -83,7 +125,10 @@
     "Verify signature and parse review decision": { "main": [[{ "node": "Validate workspace and triage channel", "type": "main", "index": 0 }]] },
     "Validate workspace and triage channel": { "main": [[{ "node": "Record authorized decision and queue delivery", "type": "main", "index": 0 }]] },
     "Record authorized decision and queue delivery": { "main": [[{ "node": "Rejoin decision context", "type": "main", "index": 0 }]] },
-    "Rejoin decision context": { "main": [[{ "node": "Delivery queued?", "type": "main", "index": 0 }]] },
+    "Rejoin decision context": { "main": [[{ "node": "Build finalized Slack card", "type": "main", "index": 0 }]] },
+    "Build finalized Slack card": { "main": [[{ "node": "Disable reviewed Slack card", "type": "main", "index": 0 }]] },
+    "Disable reviewed Slack card": { "main": [[{ "node": "Verify reviewed card disabled", "type": "main", "index": 0 }]] },
+    "Verify reviewed card disabled": { "main": [[{ "node": "Delivery queued?", "type": "main", "index": 0 }]] },
     "Delivery queued?": { "main": [[{ "node": "Run queued delivery worker", "type": "main", "index": 0 }], []] }
   },
   "pinData": {},

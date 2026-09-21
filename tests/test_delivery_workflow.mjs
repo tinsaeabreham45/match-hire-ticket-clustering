@@ -11,6 +11,9 @@ const deliveryNames = names(delivery);
 
 assert(approvalNames.has('Record authorized decision and queue delivery'));
 assert(approvalNames.has('Run queued delivery worker'));
+assert(approvalNames.has('Build finalized Slack card'));
+assert(approvalNames.has('Disable reviewed Slack card'));
+assert(approvalNames.has('Verify reviewed card disabled'));
 assert(!approvalNames.has('Mark report delivered and cluster alerted'));
 assert(!approvalNames.has('Notify engineering after approval'));
 
@@ -19,6 +22,14 @@ assert.match(decisionNode.parameters.query, /record_review_decision/);
 const contextNode = approval.nodes.find((node) => node.name === 'Validate workspace and triage channel');
 assert.match(contextNode.parameters.jsCode, /REPLACE_WITH_SLACK_WORKSPACE_ID/);
 assert.match(contextNode.parameters.jsCode, /REPLACE_WITH_SUPPORT_TRIAGE_CHANNEL_ID/);
+const parseDecision = approval.nodes.find((node) => node.name === 'Verify signature and parse review decision');
+assert.match(parseDecision.parameters.jsCode, /message_ts/);
+assert.match(parseDecision.parameters.jsCode, /message_blocks/);
+const finalizedCard = approval.nodes.find((node) => node.name === 'Build finalized Slack card');
+assert.match(finalizedCard.parameters.jsCode, /block\.type!=='actions'/);
+assert.match(finalizedCard.parameters.jsCode, /ignored_not_pending/);
+const disableCard = approval.nodes.find((node) => node.name === 'Disable reviewed Slack card');
+assert.equal(disableCard.parameters.url, 'https://slack.com/api/chat.update');
 
 for (const required of [
   'Retry delivery every minute',
