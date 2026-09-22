@@ -13,7 +13,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const crypto=require('crypto');\nconst input=$input.first(), headers=input.json.headers??{}, raw64=input.binary?.data?.data;\nconst timestamp=String(headers['x-slack-request-timestamp']??''), signature=String(headers['x-slack-signature']??''), secret=$env.SLACK_SIGNING_SECRET;\nif(!raw64||!secret||!timestamp||!signature||Math.abs(Date.now()/1000-Number(timestamp))>300) throw new Error('Rejected Slack callback: missing, expired, or incomplete signature data');\nconst raw=Buffer.from(raw64,'base64').toString('utf8');\nconst expected='v0='+crypto.createHmac('sha256',secret).update(`v0:${timestamp}:${raw}`).digest('hex');\nif(expected.length!==signature.length||!crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(signature))) throw new Error('Rejected Slack callback: invalid signature');\nconst encoded=(raw.match(/(?:^|&)payload=([^&]*)/)??[])[1];\nconst payload=JSON.parse(encoded?decodeURIComponent(encoded.replace(/\\+/g,' ')):''), button=payload.actions?.[0], value=JSON.parse(button?.value??'');\nconst action={approve_cluster:'approve',reject_cluster:'reject',split_cluster:'split'}[button?.action_id];\nconst messageTs=String(payload.message?.ts??payload.container?.message_ts??'');\nif(!action||!value.cluster_id||!value.report_draft_id||!payload.user?.id||!button.action_ts||!payload.team?.id||!payload.channel?.id||!messageTs) throw new Error('Rejected Slack callback: invalid action payload');\nreturn [{json:{cluster_id:value.cluster_id,report_draft_id:value.report_draft_id,action,actor_id:payload.user.id,workspace_id:payload.team.id,channel_id:payload.channel.id,callback_id:`${payload.user.id}:${button.action_id}:${button.action_ts}`,message_ts:messageTs,message_text:String(payload.message?.text??'Root-cause review'),message_blocks:Array.isArray(payload.message?.blocks)?payload.message.blocks:[]}}];"
+        "jsCode": "const crypto=require('crypto');\nconst input=$input.first(), headers=input.json.headers??{}, raw64=input.binary?.data?.data;\nconst timestamp=String(headers['x-slack-request-timestamp']??''), signature=String(headers['x-slack-signature']??''), secret=$env.SLACK_SIGNING_SECRET;\nif(!raw64||!secret||!timestamp||!signature||Math.abs(Date.now()/1000-Number(timestamp))>300) throw new Error('Rejected Slack callback: missing, expired, or incomplete signature data');\nconst raw=Buffer.from(raw64,'base64').toString('utf8');\nconst expected='v0='+crypto.createHmac('sha256',secret).update(`v0:${timestamp}:${raw}`).digest('hex');\nif(expected.length!==signature.length||!crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(signature))) throw new Error('Rejected Slack callback: invalid signature');\nconst encoded=(raw.match(/(?:^|&)payload=([^&]*)/)??[])[1];\nconst payload=JSON.parse(encoded?decodeURIComponent(encoded.replace(/\\+/g,' ')):''), button=payload.actions?.[0], value=JSON.parse(button?.value??'');\nconst mapped={approve_cluster:{action:'approve',decision_type:'review'},reject_cluster:{action:'reject',decision_type:'review'},split_cluster:{action:'split',decision_type:'review'},retry_investigation:{action:'retry',decision_type:'investigation'},dismiss_investigation:{action:'dismiss',decision_type:'investigation'},split_investigation:{action:'split',decision_type:'investigation'}}[button?.action_id];\nconst messageTs=String(payload.message?.ts??payload.container?.message_ts??''),hasTarget=mapped?.decision_type==='review'?Boolean(value.report_draft_id):Boolean(value.investigation_id);\nif(!mapped||!value.cluster_id||!hasTarget||!payload.user?.id||!button.action_ts||!payload.team?.id||!payload.channel?.id||!messageTs) throw new Error('Rejected Slack callback: invalid action payload');\nreturn [{json:{cluster_id:value.cluster_id,report_draft_id:value.report_draft_id??null,investigation_id:value.investigation_id??null,action:mapped.action,decision_type:mapped.decision_type,actor_id:payload.user.id,workspace_id:payload.team.id,channel_id:payload.channel.id,callback_id:`${payload.user.id}:${button.action_id}:${button.action_ts}`,message_ts:messageTs,message_text:String(payload.message?.text??'Root-cause review'),message_blocks:Array.isArray(payload.message?.blocks)?payload.message.blocks:[]}}];"
       },
       "id": "d8100000-0000-4000-8000-000000000002",
       "name": "Verify signature and parse review decision",
@@ -118,18 +118,92 @@
       "typeVersion": 1.2,
       "position": [2430, 180],
       "notes": "Select the imported report-delivery workflow. The worker claims one durable stage at a time and may be safely re-run."
+    },
+    {
+      "parameters": {"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict"},"conditions":[{"leftValue":"={{ $json.decision_type }}","rightValue":"investigation","operator":{"type":"string","operation":"equals"}}],"combinator":"and"}},
+      "id": "d8100000-0000-4000-8000-000000000011",
+      "name": "Investigation action?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [940, 500]
+    },
+    {
+      "parameters": {"operation":"executeQuery","query":"SELECT ticket_cluster.record_investigation_decision($1::uuid,$2::uuid,$3,$4,$5,$6,$7) AS action_status;","options":{"queryReplacement":"={{ [$json.cluster_id,$json.investigation_id,$json.action,$json.actor_id,$json.callback_id,$json.workspace_id,$json.channel_id] }}"}},
+      "id": "d8100000-0000-4000-8000-000000000012",
+      "name": "Record authorized investigation action",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1180, 500],
+      "notes": "Validates the same approver and Slack context as report approval. Investigation actions never enqueue engineering delivery."
+    },
+    {
+      "parameters": {"jsCode":"return [{json:{...$('Validate workspace and triage channel').item.json,action_status:$json.action_status}}];"},
+      "id": "d8100000-0000-4000-8000-000000000013",
+      "name": "Rejoin investigation context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1420, 500]
+    },
+    {
+      "parameters": {"jsCode":"const allowed=new Set(['retry_queued','dismissed','split','ignored_not_open','duplicate_callback']);if(!allowed.has($json.action_status))return[];const labels={retry_queued:'Retry requested',dismissed:'Dismissed',split:'Split requested',ignored_not_open:'Already processed',duplicate_callback:'Already processed'},icons={retry_queued:'🔄',dismissed:'🗑️',split:'🔀',ignored_not_open:'ℹ️',duplicate_callback:'ℹ️'},blocks=($json.message_blocks??[]).filter(block=>block.type!=='actions');blocks.push({type:'context',elements:[{type:'mrkdwn',text:`${icons[$json.action_status]} *${labels[$json.action_status]}* by <@${$json.actor_id}>`} ]});return[{json:{...$json,slack_body:{channel:$json.channel_id,ts:$json.message_ts,text:`Root-cause investigation — ${labels[$json.action_status]}`,blocks}}}];"},
+      "id": "d8100000-0000-4000-8000-000000000014",
+      "name": "Build finalized investigation card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1660, 500]
+    },
+    {
+      "parameters": {"method":"POST","url":"https://slack.com/api/chat.update","authentication":"predefinedCredentialType","nodeCredentialType":"slackApi","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Content-Type","value":"application/json"}]},"sendBody":true,"contentType":"raw","rawContentType":"application/json","body":"={{ JSON.stringify($json.slack_body) }}","options":{"timeout":15000}},
+      "id": "d8100000-0000-4000-8000-000000000015",
+      "name": "Disable investigation Slack card",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1900, 500],
+      "notes": "Attach the existing Slack API credential."
+    },
+    {
+      "parameters": {"jsCode":"if($json.ok!==true)throw new Error(`Slack investigation card update rejected: ${$json.error??'unknown error'}`);return[{json:$('Build finalized investigation card').item.json}];"},
+      "id": "d8100000-0000-4000-8000-000000000016",
+      "name": "Verify investigation card disabled",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2140, 500]
+    },
+    {
+      "parameters": {"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict"},"conditions":[{"leftValue":"={{ $json.action_status }}","rightValue":"retry_queued","operator":{"type":"string","operation":"equals"}}],"combinator":"and"}},
+      "id": "d8100000-0000-4000-8000-000000000017",
+      "name": "Retry investigation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2380, 500]
+    },
+    {
+      "parameters": {"workflowId":{"__rl":true,"mode":"id","value":"REPLACE_WITH_IMPORTED_CLUSTER_REVIEW_WORKFLOW_ID"},"options":{}},
+      "id": "d8100000-0000-4000-8000-000000000018",
+      "name": "Run cluster verification again",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [2620, 420],
+      "notes": "Select the imported cluster-review workflow. The existing cluster_id is passed through without creating a ticket."
     }
   ],
   "connections": {
     "Slack approval callback": { "main": [[{ "node": "Verify signature and parse review decision", "type": "main", "index": 0 }]] },
     "Verify signature and parse review decision": { "main": [[{ "node": "Validate workspace and triage channel", "type": "main", "index": 0 }]] },
-    "Validate workspace and triage channel": { "main": [[{ "node": "Record authorized decision and queue delivery", "type": "main", "index": 0 }]] },
+    "Validate workspace and triage channel": { "main": [[{ "node": "Investigation action?", "type": "main", "index": 0 }]] },
+    "Investigation action?": { "main": [[{ "node": "Record authorized investigation action", "type": "main", "index": 0 }],[{ "node": "Record authorized decision and queue delivery", "type": "main", "index": 0 }]] },
     "Record authorized decision and queue delivery": { "main": [[{ "node": "Rejoin decision context", "type": "main", "index": 0 }]] },
     "Rejoin decision context": { "main": [[{ "node": "Build finalized Slack card", "type": "main", "index": 0 }]] },
     "Build finalized Slack card": { "main": [[{ "node": "Disable reviewed Slack card", "type": "main", "index": 0 }]] },
     "Disable reviewed Slack card": { "main": [[{ "node": "Verify reviewed card disabled", "type": "main", "index": 0 }]] },
     "Verify reviewed card disabled": { "main": [[{ "node": "Delivery queued?", "type": "main", "index": 0 }]] },
-    "Delivery queued?": { "main": [[{ "node": "Run queued delivery worker", "type": "main", "index": 0 }], []] }
+    "Delivery queued?": { "main": [[{ "node": "Run queued delivery worker", "type": "main", "index": 0 }], []] },
+    "Record authorized investigation action": { "main": [[{ "node": "Rejoin investigation context", "type": "main", "index": 0 }]] },
+    "Rejoin investigation context": { "main": [[{ "node": "Build finalized investigation card", "type": "main", "index": 0 }]] },
+    "Build finalized investigation card": { "main": [[{ "node": "Disable investigation Slack card", "type": "main", "index": 0 }]] },
+    "Disable investigation Slack card": { "main": [[{ "node": "Verify investigation card disabled", "type": "main", "index": 0 }]] },
+    "Verify investigation card disabled": { "main": [[{ "node": "Retry investigation?", "type": "main", "index": 0 }]] },
+    "Retry investigation?": { "main": [[{ "node": "Run cluster verification again", "type": "main", "index": 0 }], []] }
   },
   "pinData": {},
   "active": false,

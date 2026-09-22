@@ -30,6 +30,7 @@ Apply these once, in order, to an isolated staging database first:
 9. `009_recurrence_episodes.sql`
 10. `010_pilot_readiness_gates.sql`
 11. `011_incident_lifecycle.sql`
+12. `012_investigation_cards.sql`
 
 Migration `005` creates an empty approver allowlist. Before enabling the
 approval workflow, add the support lead's Slack member ID and the existing

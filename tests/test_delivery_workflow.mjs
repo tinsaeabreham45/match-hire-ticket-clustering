@@ -76,6 +76,7 @@ const migration008 = readFileSync('docs/sql/008_privacy_retention.sql', 'utf8');
 const migration009 = readFileSync('docs/sql/009_recurrence_episodes.sql', 'utf8');
 const migration010 = readFileSync('docs/sql/010_pilot_readiness_gates.sql', 'utf8');
 const migration011 = readFileSync('docs/sql/011_incident_lifecycle.sql', 'utf8');
+const migration012 = readFileSync('docs/sql/012_investigation_cards.sql', 'utf8');
 assert.match(migration007, /operational_incidents/);
 assert.match(migration007, /record_workflow_failure/);
 assert.match(migration007, /severity = 'error' AND notified_at/);
@@ -94,6 +95,30 @@ assert.match(migration011, /verification_attention/);
 assert.match(migration011, /status = 'resolved'/);
 assert.match(migration011, /c\.status = 'verification_pending'/);
 assert.match(migration011, /c\.status = 'needs_review'/);
+assert.match(migration012, /create_cluster_investigation/);
+assert.match(migration012, /record_investigation_decision/);
+assert.match(migration012, /cluster_investigations_one_open_idx/);
+assert.match(migration012, /investigation_delivery_stuck/);
+
+for (const required of [
+  'Create investigation case',
+  'Build Slack investigation card',
+  'Post investigation card',
+  'Verify investigation card posted',
+  'Checkpoint investigation card',
+]) assert(names(review).has(required), `missing ${required}`);
+assert.match(review.nodes.find((node) => node.name === 'Build Slack investigation card').parameters.jsCode, /retry_investigation/);
+assert.match(review.nodes.find((node) => node.name === 'Build Slack investigation card').parameters.jsCode, /dismiss_investigation/);
+
+for (const required of [
+  'Investigation action?',
+  'Record authorized investigation action',
+  'Disable investigation Slack card',
+  'Retry investigation?',
+  'Run cluster verification again',
+]) assert(approvalNames.has(required), `missing ${required}`);
+assert.match(parseDecision.parameters.jsCode, /retry_investigation/);
+assert.match(parseDecision.parameters.jsCode, /dismiss_investigation/);
 
 const coreWorkflow = JSON.parse(readFileSync('workflows/support-ticket-clustering.template.json', 'utf8'));
 const normalizeInput = coreWorkflow.nodes.find((node) => node.name === 'Normalize and validate input');

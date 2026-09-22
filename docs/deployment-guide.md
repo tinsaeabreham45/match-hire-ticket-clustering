@@ -71,6 +71,7 @@ docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < 
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_recurrence_episodes.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_pilot_readiness_gates.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_incident_lifecycle.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_investigation_cards.sql
 docker compose exec -T -e TEST_DATABASE_URL=postgresql://n8n@localhost/n8n_staging postgres bash -s < tests/test_ingestion_concurrency.sh
 ```
 
