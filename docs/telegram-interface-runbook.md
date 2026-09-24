@@ -75,6 +75,19 @@ Workflow. Save and publish, but do not activate yet.
 
 ## 4. Register the webhook safely
 
+Before registration, allow Telegram's webhook senders to reach HTTPS on the
+EC2 security group. Keep the operator's existing HTTPS and SSH rules, and add
+two inbound **Custom TCP / port 443** rules:
+
+- `149.154.160.0/20`
+- `91.108.4.0/22`
+
+Telegram publishes these ranges in its webhook guide and warns that they can
+change, so re-check that guide during incident diagnosis. The security-group
+rules do not replace the application checks: TLS, the secret-token header,
+update-id idempotency, chat binding, and reviewer authorization all remain
+required.
+
 Open **Telegram support, review, and approval interface** in n8n. Select
 **Telegram webhook** and copy its **Production URL**. It must end with
 `/webhook/telegram-support-v1`; never use the test URL.
