@@ -6,10 +6,12 @@ DO $$
 DECLARE
   review_code text;
   engineering_code text;
+  operations_code text;
   result text;
 BEGIN
   review_code := create_telegram_setup_code('review');
   engineering_code := create_telegram_setup_code('engineering');
+  operations_code := create_telegram_setup_code('operations');
   result := consume_telegram_setup_code(
     review_code, 'review', -900001, 'group', 'Test Review', 700001, 'Reviewer'
   );
@@ -21,7 +23,14 @@ BEGIN
   IF result <> 'chat_already_connected' THEN
     RAISE EXCEPTION 'cross-role setup was not rejected safely: %', result;
   END IF;
-  DELETE FROM telegram_connections WHERE chat_id = -900001;
+  result := consume_telegram_setup_code(
+    operations_code, 'operations', -900002, 'supergroup', 'Test Operations', 700001, 'Operator'
+  );
+  IF result <> 'connected' THEN RAISE EXCEPTION 'operations setup failed: %', result; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM telegram_connections WHERE role='operations' AND chat_id=-900002 AND active
+  ) THEN RAISE EXCEPTION 'operations destination was not persisted'; END IF;
+  DELETE FROM telegram_connections WHERE chat_id IN (-900001, -900002);
   DELETE FROM authorized_telegram_approvers WHERE telegram_user_id = 700001;
 END;
 $$;

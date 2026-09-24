@@ -35,6 +35,12 @@ node scripts/prepare-n8n-import.mjs \
 Prepare the other workflows the same way. Keep each generated import file
 private and remove it after the n8n UI import is complete.
 
+For a Telegram-only deployment, prepare
+`workflows/operational-monitor.telegram.template.json` instead. It has no Slack
+channel placeholder. Apply migration `016`, connect the Telegram Operations
+group, and attach the existing Postgres and Telegram credentials. Activate
+only one operations monitor per deployment.
+
 ## 3. Import and publish in n8n
 
 For every workflow:

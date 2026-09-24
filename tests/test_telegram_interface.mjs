@@ -6,7 +6,9 @@ const telegram = readJson('workflows/telegram-interface.template.json');
 const review = readJson('workflows/cluster-review.template.json');
 const delivery = readJson('workflows/report-delivery.template.json');
 const requeue = readJson('workflows/requeue-cluster-verification.template.json');
+const telegramOperations = readJson('workflows/operational-monitor.telegram.template.json');
 const migration = readFileSync('docs/sql/014_telegram_interface.sql', 'utf8');
+const operationsMigration = readFileSync('docs/sql/016_telegram_operations.sql', 'utf8');
 
 const validateGraph = (workflow) => {
   const names = new Set(workflow.nodes.map((node) => node.name));
@@ -22,7 +24,7 @@ const validateGraph = (workflow) => {
   }
 };
 
-for (const workflow of [telegram, review, delivery]) validateGraph(workflow);
+for (const workflow of [telegram, review, delivery, telegramOperations]) validateGraph(workflow);
 
 const telegramNames = new Set(telegram.nodes.map((node) => node.name));
 for (const required of [
@@ -61,6 +63,9 @@ assert.deepEqual(
 for (const telegramNode of [telegram, review, delivery].flatMap((workflow) => workflow.nodes).filter((node) => node.type === 'n8n-nodes-base.telegram')) {
   assert.equal(telegramNode.credentials, undefined, `${telegramNode.name} must remain credential-free in Git`);
 }
+for (const telegramNode of telegramOperations.nodes.filter((node) => node.type === 'n8n-nodes-base.telegram')) {
+  assert.equal(telegramNode.credentials, undefined, `${telegramNode.name} must remain credential-free in Git`);
+}
 
 for (const pattern of [
   /telegram_updates/,
@@ -90,6 +95,35 @@ assert.match(migration, /message_id IS DISTINCT FROM p_message_id/);
 assert.match(migration, /count\(\*\)=3 AND bool_and\(status='succeeded'\)/);
 assert.doesNotMatch(migration, /TELEGRAM_BOT_TOKEN\s*=/);
 assert.doesNotMatch(migration, /TELEGRAM_WEBHOOK_SECRET\s*=/);
+
+for (const pattern of [
+  /'review', 'engineering', 'operations'/,
+  /CREATE OR REPLACE FUNCTION create_telegram_setup_code/,
+  /CREATE OR REPLACE FUNCTION consume_telegram_setup_code/,
+  /chat_already_connected/,
+]) assert.match(operationsMigration, pattern);
+
+const telegramOperationsNames = new Set(telegramOperations.nodes.map((node) => node.name));
+for (const required of [
+  'Refresh operational incidents',
+  'List incidents needing notification',
+  'Build sanitized operations alert',
+  'Load Telegram operations destination',
+  'Prepare Telegram operations alert',
+  'Notify operations in Telegram',
+  'Verify Telegram operations alert',
+  'Mark incidents notified',
+]) assert(telegramOperationsNames.has(required), `missing Telegram operations node: ${required}`);
+assert(!telegramOperationsNames.has('Notify operations in Slack'));
+assert.match(
+  telegramOperations.nodes.find((node) => node.name === 'Load Telegram operations destination').parameters.query,
+  /role='operations'/,
+);
+assert.match(
+  telegramOperations.nodes.find((node) => node.name === 'Build sanitized operations alert').parameters.jsCode,
+  /new Map\(\)/,
+);
+assert.doesNotMatch(JSON.stringify(telegramOperations), /REPLACE_WITH_OPERATIONS_CHANNEL_ID|slack\.com/);
 
 const reviewNames = new Set(review.nodes.map((node) => node.name));
 for (const required of [

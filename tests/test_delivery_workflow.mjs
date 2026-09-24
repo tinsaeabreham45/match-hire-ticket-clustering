@@ -134,6 +134,7 @@ const setupGuide = readFileSync('docs/n8n-ui-setup.md', 'utf8');
 for (const workflowFile of [
   'operational-error-capture.template.json',
   'operational-monitor.template.json',
+  'operational-monitor.telegram.template.json',
   'report-delivery.template.json',
   'approval-handler.template.json',
   'cluster-review.template.json',

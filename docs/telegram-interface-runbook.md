@@ -2,7 +2,8 @@
 
 This release adds a single-company Telegram adapter without changing the
 clustering algorithm or removing Slack. Telegram can provide private ticket
-intake, a private human-review group, and a separate engineering-alert group.
+intake, a private human-review group, a separate engineering-alert group, and
+a restricted operations-alert group.
 
 ## Security boundary
 
@@ -116,14 +117,15 @@ sets:
 Telegram will then include the secret-token header that the first Code node
 checks with a timing-safe comparison.
 
-## 5. Connect the two private groups
+## 5. Connect the three private groups
 
-After migration 014 is applied, create two expiring setup codes in a private
+After migrations 014 through 016 are applied, create three expiring setup codes in a private
 Postgres operator session:
 
 ```sql
 SELECT ticket_cluster.create_telegram_setup_code('review');
 SELECT ticket_cluster.create_telegram_setup_code('engineering');
+SELECT ticket_cluster.create_telegram_setup_code('operations');
 ```
 
 Each code expires after 15 minutes and works once.
@@ -132,10 +134,11 @@ Each code expires after 15 minutes and works once.
    account that should become the first authorized reviewer.
 2. In **TriagePulse Engineering Alerts**, send
    `/connect engineering CODE`.
-3. Delete the setup-command messages from both groups after the bot confirms
+3. In **TriagePulse Operations**, send `/connect operations CODE`.
+4. Delete the setup-command messages from all three groups after the bot confirms
    connection. The hashed, consumed codes are harmless, but removing them
    reduces confusion.
-4. Confirm configuration without exposing secrets:
+5. Confirm configuration without exposing secrets:
 
 ```sql
 SELECT role, chat_id, chat_type, title, active, connected_at
@@ -148,6 +151,11 @@ FROM ticket_cluster.authorized_telegram_approvers;
 Additional reviewers must be deliberately added to
 `authorized_telegram_approvers`; merely joining the group grants no approval
 permission.
+
+Activate only `operational-monitor.telegram.template.json` for a Telegram-only
+deployment. It sends sanitized incident severity, message, and incident key to
+the Operations group and then checkpoints the same notification ledger used by
+the Slack monitor. Do not activate both monitor variants for one deployment.
 
 ## 6. Canary test
 
@@ -169,6 +177,9 @@ Activate the Telegram workflow, then test in this order:
    engineering group.
 9. Press the old button again from message history. It must not produce a
    second decision or engineering alert.
+10. Create one controlled workflow-failure incident. Confirm exactly one
+    sanitized alert appears in **TriagePulse Operations**, then resolve the
+    incident and confirm it is not repeated.
 
 During the canary, inspect `telegram_updates`, `telegram_intake_jobs`,
 `telegram_review_surfaces`, `telegram_decision_attempts`, and

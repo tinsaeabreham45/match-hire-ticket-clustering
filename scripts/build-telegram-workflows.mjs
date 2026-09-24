@@ -389,7 +389,46 @@ function extendReportDelivery() {
   return workflow;
 }
 
+function buildTelegramOperationalMonitor() {
+  const workflow = load('workflows/operational-monitor.template.json');
+  workflow.name = 'Operational incident monitor — Telegram template';
+  workflow.meta = { ...(workflow.meta ?? {}), telegramOperations: true };
+
+  const buildAlert = byName(workflow, 'Build sanitized operations alert');
+  buildAlert.parameters.jsCode = "const byKey=new Map();for(const item of $input.all()){const incident=item.json;if(incident.incident_key)byKey.set(incident.incident_key,incident);}const incidents=[...byKey.values()];if(!incidents.length)return[];const clean=value=>String(value??'').replace(/\\s+/g,' ').slice(0,350);const lines=incidents.map(i=>'• ['+clean(i.severity)+'] '+clean(i.message)+' ('+clean(i.incident_key)+')');const text=('Operational attention needed ('+incidents.length+')\\n'+lines.join('\\n')).slice(0,3900);return[{json:{incident_keys:incidents.map(i=>i.incident_key),text}}];";
+  buildAlert.notes = 'Only sanitized incident metadata is sent. Ticket text, credentials, and provider payloads are excluded.';
+
+  workflow.nodes = workflow.nodes.filter((candidate) => ![
+    'Notify operations in Slack',
+    'Verify operations alert',
+  ].includes(candidate.name));
+  workflow.nodes.push(
+    node('tg-ops-01', 'Load Telegram operations destination', 'n8n-nodes-base.postgres', [1260, 300], {
+      operation: 'executeQuery',
+      query: "SELECT (SELECT chat_id::text FROM ticket_cluster.telegram_connections WHERE role='operations' AND active LIMIT 1) AS chat_id;",
+      options: {},
+    }, 2.5),
+    node('tg-ops-02', 'Prepare Telegram operations alert', 'n8n-nodes-base.code', [1500, 300], {
+      jsCode: "const alert=$('Build sanitized operations alert').item.json,chat_id=$json.chat_id;if(!chat_id)throw new Error('Telegram operations group is not connected');const escape=value=>String(value??'').replace(/[&<>]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));return[{json:{incident_keys:alert.incident_keys,telegram_body:{chat_id,text:escape(alert.text)}}}];",
+    }),
+    node('tg-ops-03', 'Notify operations in Telegram', 'n8n-nodes-base.telegram', [1740, 300], telegramSend(), 1.2),
+    node('tg-ops-04', 'Verify Telegram operations alert', 'n8n-nodes-base.code', [1980, 300], {
+      jsCode: "if($json.ok!==true||!$json.result?.message_id)throw new Error(`Operations Telegram alert rejected: ${$json.description??'missing message id'}`);const alert=$('Prepare Telegram operations alert').item.json;return[{json:{incident_keys:alert.incident_keys,message_id:String($json.result.message_id)}}];",
+    }),
+  );
+  byName(workflow, 'Mark incidents notified').position = [2220, 300];
+  connect(workflow, 'Build sanitized operations alert', [['Load Telegram operations destination']]);
+  connect(workflow, 'Load Telegram operations destination', [['Prepare Telegram operations alert']]);
+  connect(workflow, 'Prepare Telegram operations alert', [['Notify operations in Telegram']]);
+  connect(workflow, 'Notify operations in Telegram', [['Verify Telegram operations alert']]);
+  connect(workflow, 'Verify Telegram operations alert', [['Mark incidents notified']]);
+  delete workflow.connections['Notify operations in Slack'];
+  delete workflow.connections['Verify operations alert'];
+  return workflow;
+}
+
 save('workflows/telegram-interface.template.json', buildTelegramInterface());
 save('workflows/cluster-review.template.json', extendClusterReview());
 save('workflows/report-delivery.template.json', extendReportDelivery());
-console.log('Built Telegram workflow and extended shared review/delivery workflows.');
+save('workflows/operational-monitor.telegram.template.json', buildTelegramOperationalMonitor());
+console.log('Built Telegram workflow, operations monitor, and extended shared review/delivery workflows.');

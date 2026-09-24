@@ -1,0 +1,251 @@
+{
+  "name": "Operational incident monitor — Telegram template",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "f3400000-0000-4000-8000-000000000001",
+      "name": "Check operational health every five minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH refreshed AS (SELECT * FROM ticket_cluster.refresh_operational_incidents()) SELECT count(*)::integer AS refreshed_count FROM refreshed;"
+      },
+      "id": "f3400000-0000-4000-8000-000000000002",
+      "name": "Refresh operational incidents",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        500,
+        300
+      ],
+      "notes": "Attach the existing Postgres credential. This query always emits exactly one row so downstream nodes execute once."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ticket_cluster.list_operational_incidents_to_notify();"
+      },
+      "id": "f3400000-0000-4000-8000-000000000003",
+      "name": "List incidents needing notification",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        760,
+        300
+      ],
+      "notes": "Attach the existing Postgres credential. Warnings and one-off workflow failures notify once; condition-based errors may repeat hourly until resolved."
+    },
+    {
+      "parameters": {
+        "jsCode": "const byKey=new Map();for(const item of $input.all()){const incident=item.json;if(incident.incident_key)byKey.set(incident.incident_key,incident);}const incidents=[...byKey.values()];if(!incidents.length)return[];const clean=value=>String(value??'').replace(/\\s+/g,' ').slice(0,350);const lines=incidents.map(i=>'• ['+clean(i.severity)+'] '+clean(i.message)+' ('+clean(i.incident_key)+')');const text=('Operational attention needed ('+incidents.length+')\\n'+lines.join('\\n')).slice(0,3900);return[{json:{incident_keys:incidents.map(i=>i.incident_key),text}}];"
+      },
+      "id": "f3400000-0000-4000-8000-000000000004",
+      "name": "Build sanitized operations alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1020,
+        300
+      ],
+      "notes": "Only sanitized incident metadata is sent. Ticket text, credentials, and provider payloads are excluded."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_cluster.mark_operational_incidents_notified($1::text[]);",
+        "options": {
+          "queryReplacement": "={{ [$json.incident_keys] }}"
+        }
+      },
+      "id": "f3400000-0000-4000-8000-000000000007",
+      "name": "Mark incidents notified",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2220,
+        300
+      ],
+      "notes": "Attach the existing Postgres credential."
+    },
+    {
+      "id": "tg-ops-01",
+      "name": "Load Telegram operations destination",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1260,
+        300
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT (SELECT chat_id::text FROM ticket_cluster.telegram_connections WHERE role='operations' AND active LIMIT 1) AS chat_id;",
+        "options": {}
+      }
+    },
+    {
+      "id": "tg-ops-02",
+      "name": "Prepare Telegram operations alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const alert=$('Build sanitized operations alert').item.json,chat_id=$json.chat_id;if(!chat_id)throw new Error('Telegram operations group is not connected');const escape=value=>String(value??'').replace(/[&<>]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));return[{json:{incident_keys:alert.incident_keys,telegram_body:{chat_id,text:escape(alert.text)}}}];"
+      }
+    },
+    {
+      "id": "tg-ops-03",
+      "name": "Notify operations in Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1740,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.telegram_body.chat_id }}",
+        "text": "={{ $json.telegram_body.text }}",
+        "replyMarkup": "none",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      }
+    },
+    {
+      "id": "tg-ops-04",
+      "name": "Verify Telegram operations alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        300
+      ],
+      "parameters": {
+        "jsCode": "if($json.ok!==true||!$json.result?.message_id)throw new Error(`Operations Telegram alert rejected: ${$json.description??'missing message id'}`);const alert=$('Prepare Telegram operations alert').item.json;return[{json:{incident_keys:alert.incident_keys,message_id:String($json.result.message_id)}}];"
+      }
+    }
+  ],
+  "connections": {
+    "Check operational health every five minutes": {
+      "main": [
+        [
+          {
+            "node": "Refresh operational incidents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refresh operational incidents": {
+      "main": [
+        [
+          {
+            "node": "List incidents needing notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List incidents needing notification": {
+      "main": [
+        [
+          {
+            "node": "Build sanitized operations alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build sanitized operations alert": {
+      "main": [
+        [
+          {
+            "node": "Load Telegram operations destination",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Telegram operations destination": {
+      "main": [
+        [
+          {
+            "node": "Prepare Telegram operations alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Telegram operations alert": {
+      "main": [
+        [
+          {
+            "node": "Notify operations in Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify operations in Telegram": {
+      "main": [
+        [
+          {
+            "node": "Verify Telegram operations alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Telegram operations alert": {
+      "main": [
+        [
+          {
+            "node": "Mark incidents notified",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "template": true,
+    "credentialFree": true,
+    "telegramOperations": true
+  },
+  "tags": []
+}

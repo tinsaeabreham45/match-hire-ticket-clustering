@@ -12,6 +12,7 @@ At the private n8n operator URL supplied out-of-band by the system owner:
 4. Import, one at a time and in this exact order:
    - `workflows/operational-error-capture.template.json`
    - `workflows/operational-monitor.template.json`
+   - `workflows/operational-monitor.telegram.template.json` (Telegram deployments; do not activate both monitors)
    - `workflows/report-delivery.template.json`
    - `workflows/approval-handler.template.json`
    - `workflows/cluster-review.template.json`
@@ -37,7 +38,7 @@ Create credentials from the specific node that will consume them: click the node
 | `OPENROUTER_API_KEY` | **Header Auth**: header `Authorization`, value `Bearer <OpenRouter key>`. | Review: `Verify root cause with OpenRouter`; `Draft report with OpenRouter`. |
 | `POSTGRES_PASSWORD` | The **Postgres** credential offered by a Postgres node. Use host `postgres` (inside Compose), port `5432`, database `n8n`, user `n8n`, and the existing password. | Core: `Assign seed-anchored cluster`, `Record invalid ticket`. Review: `Load cluster evidence`, `Persist verification`, `Persist pending report draft`, `Create investigation case`, `Checkpoint investigation card`. Approval: both `Record authorized…` nodes. Delivery: claim/checkpoint nodes. Monitor/error capture: all Postgres nodes. |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Use the Google credential type offered by the imported Google Docs/Sheets nodes (OAuth2 may be required by the installed n8n version). Enable Google Docs, Sheets, and Drive APIs, and grant that identity access to the approved destination. | Delivery: `Create approved Google Doc`, `Write approved report content`, `Verify Google Doc content`, `Append approved audit row to Sheets`. |
-| `TELEGRAM_BOT_TOKEN` | Create the native **Telegram API** credential offered by a Telegram node and enter the BotFather access token. | Telegram interface: all Telegram nodes. Review: `Post Telegram approval card`, `Post Telegram investigation card`. Delivery: `Notify engineering in Telegram`. |
+| `TELEGRAM_BOT_TOKEN` | Create the native **Telegram API** credential offered by a Telegram node and enter the BotFather access token. | Telegram interface: all Telegram nodes. Review: `Post Telegram approval card`, `Post Telegram investigation card`. Delivery: `Notify engineering in Telegram`. Telegram monitor: `Notify operations in Telegram`. |
 
 `SLACK_SIGNING_SECRET` and `TELEGRAM_WEBHOOK_SECRET` are not attached to node credentials: they must be server-side n8n container environment variables because the callback/webhook Code nodes authenticate the raw incoming request. Also set `NODE_FUNCTION_ALLOW_BUILTIN=crypto` in the n8n service environment. Do not enter either value in workflow JSON or a Code node.
 
@@ -64,6 +65,8 @@ Create credentials from the specific node that will consume them: click the node
 | REPLACE_WITH_DELIVERY_CHANNEL_TO_REQUEUE | Requeue workflow → Set cluster to requeue Code node | Use `slack` or `telegram` for the engineering destination after approval. Normally match the review interface. |
 
 You may provide only these non-secret IDs/model slugs in chat if you want the JSON edited before importing. Do not provide any token, private key, password, or signing secret.
+
+For a Slack deployment, activate only `operational-monitor.template.json`. For a Telegram deployment, connect the Operations group with `/connect operations CODE` and activate only `operational-monitor.telegram.template.json`; it discovers the group from Postgres and has no Slack placeholder.
 
 ## 4. Configure Slack events and Interactivity
 
