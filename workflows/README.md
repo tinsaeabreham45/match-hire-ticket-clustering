@@ -7,7 +7,7 @@ The n8n implementation is split into eight inactive, credential-free imports:
 3. `cluster-review.template.json` — evidence lookup, structured OpenRouter verification/report drafting with Gemini fallback on provider or strict-JSON failure, database persistence, and channel-routed Slack or Telegram review card.
 4. `approval-handler.template.json` — signed Slack action callback, expected workspace/channel check, authorized approve/reject/split decision, and durable delivery queueing.
 5. `report-delivery.template.json` — one-stage-at-a-time Docs, Sheets, and Slack/Telegram engineering-delivery outbox worker.
-6. `requeue-cluster-verification.template.json` — operator-only manual recovery for a cluster whose prior verification completed in a safe needs_review state.
+6. `requeue-cluster-verification.template.json` — operator-only manual recovery for a cluster whose prior verification stopped or completed in a safe needs_review state, with explicit Slack/Telegram routing.
 7. `operational-error-capture.template.json` — records sanitized n8n workflow failures in the operator incident ledger.
 8. `operational-monitor.template.json` — refreshes delivery/review incidents and posts a rate-limited operations alert.
 

@@ -176,10 +176,23 @@
     },
     {
       "parameters": {
+        "jsCode": "const j=$json;const adapter_context=j.adapter_context??{review_interface:'slack',delivery_channel:'slack'};return[{json:{...j,evidence_ticket_ids_json:JSON.stringify(j.verification.evidence_ticket_ids),verification_response_json:JSON.stringify({result:j.verification,response:j.response,provider_failure:j.provider_failure===true}),review_context_json:JSON.stringify({cluster_id:j.cluster_id,tickets:j.tickets,verification:j.verification,adapter_context})}}];"
+      },
+      "id": "b40d0a41-0bb3-45c4-9a12-000000000039",
+      "name": "Prepare verification persistence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1925,
+        300
+      ]
+    },
+    {
+      "parameters": {
         "operation": "executeQuery",
         "query": "SELECT ticket_cluster.record_cluster_verification($1::uuid,$2,$3,$4::real,$5,ARRAY(SELECT jsonb_array_elements_text($6::jsonb)::uuid),$7::jsonb,0.75) AS verification_status,$8::jsonb AS review_context;",
         "options": {
-          "queryReplacement": "={{ [$json.cluster_id,$json.verification_model,$json.verification.verdict,$json.verification.confidence,$json.verification.root_cause,JSON.stringify($json.verification.evidence_ticket_ids),JSON.stringify({result:$json.verification,response:$json.response,provider_failure:$json.provider_failure??false}),JSON.stringify({cluster_id:$json.cluster_id,tickets:$json.tickets,verification:$json.verification,adapter_context:$json.adapter_context??{review_interface:'slack',delivery_channel:'slack'}})] }}"
+          "queryReplacement": "={{ [$json.cluster_id,$json.verification_model,$json.verification.verdict,$json.verification.confidence,$json.verification.root_cause,$json.evidence_ticket_ids_json,$json.verification_response_json,$json.review_context_json] }}"
         }
       },
       "id": "b40d0a41-0bb3-45c4-9a12-000000000009",
@@ -920,7 +933,7 @@
         ],
         [
           {
-            "node": "Persist verification",
+            "node": "Prepare verification persistence",
             "type": "main",
             "index": 0
           }
@@ -939,6 +952,17 @@
       ]
     },
     "Validate Gemini verification fallback": {
+      "main": [
+        [
+          {
+            "node": "Prepare verification persistence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare verification persistence": {
       "main": [
         [
           {

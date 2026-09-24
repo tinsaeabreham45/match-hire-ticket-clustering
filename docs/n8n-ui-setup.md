@@ -60,6 +60,8 @@ Create credentials from the specific node that will consume them: click the node
 | `REPLACE_WITH_ENGINEERING_ALERTS_CHANNEL_ID` | Delivery → `Build engineering alert` Code node | Slack: open `#eng-alerts` → channel name → **About** → copy **Channel ID**. Paste the ID, not the channel name. |
 | `REPLACE_WITH_OPERATIONS_CHANNEL_ID` | Monitor → `Build sanitized operations alert` | Copy the ID of the restricted operations-alert channel. |
 | REPLACE_WITH_CLUSTER_ID_TO_REQUEUE | Requeue workflow → Set cluster to requeue Code node | Only when recovering a completed provider failure: query the cluster ID in Postgres or copy it from the review execution. Replace the UUID, run manually, then restore the placeholder before saving. |
+| REPLACE_WITH_REVIEW_INTERFACE_TO_REQUEUE | Requeue workflow → Set cluster to requeue Code node | Use `slack` or `telegram` to send the recovered human-review card back to the interface where the incident originated. |
+| REPLACE_WITH_DELIVERY_CHANNEL_TO_REQUEUE | Requeue workflow → Set cluster to requeue Code node | Use `slack` or `telegram` for the engineering destination after approval. Normally match the review interface. |
 
 You may provide only these non-secret IDs/model slugs in chat if you want the JSON edited before importing. Do not provide any token, private key, password, or signing secret.
 
@@ -99,4 +101,4 @@ If an execution fails, open the failed node’s **Error** tab, record the n8n ex
 
 The review workflow treats an OpenRouter HTTP 429/5xx, error payload, missing content, or invalid strict JSON as a technical failure. It calls Gemini 2.5 Flash with the same evidence and a JSON schema. A valid OpenRouter needs_review verdict is a human-review decision, not a provider failure, so Gemini is not called.
 
-If both providers fail during verification, the cluster safely remains needs_review. If the prior execution is marked **Success**, n8n has no Retry button because the workflow intentionally stopped safely. Import the inactive requeue workflow, select the review workflow in Run cluster review again, replace its cluster UUID placeholder, and click **Execute Workflow**. It reuses stored evidence and does not create another support ticket.
+If both providers fail during verification, the cluster safely remains needs_review. If the prior execution is marked **Success**, n8n has no Retry button because the workflow intentionally stopped safely. Import the inactive requeue workflow, select the review workflow in Run cluster review again, replace its cluster UUID and interface/channel placeholders, and click **Execute Workflow**. It reuses stored evidence, preserves Slack-versus-Telegram routing, and does not create another support ticket.

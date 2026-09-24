@@ -275,7 +275,14 @@ function extendClusterReview() {
   loadEvidence.parameters.options.queryReplacement = "={{ [$json.cluster_id,JSON.stringify({review_interface:$json.review_interface??'slack',delivery_channel:$json.delivery_channel??'slack'})] }}";
 
   const persistVerification = byName(workflow, 'Persist verification');
-  persistVerification.parameters.options.queryReplacement = "={{ [$json.cluster_id,$json.verification_model,$json.verification.verdict,$json.verification.confidence,$json.verification.root_cause,JSON.stringify($json.verification.evidence_ticket_ids),JSON.stringify({result:$json.verification,response:$json.response,provider_failure:$json.provider_failure??false}),JSON.stringify({cluster_id:$json.cluster_id,tickets:$json.tickets,verification:$json.verification,adapter_context:$json.adapter_context??{review_interface:'slack',delivery_channel:'slack'}})] }}";
+  persistVerification.parameters.options.queryReplacement = "={{ [$json.cluster_id,$json.verification_model,$json.verification.verdict,$json.verification.confidence,$json.verification.root_cause,$json.evidence_ticket_ids_json,$json.verification_response_json,$json.review_context_json] }}";
+
+  workflow.nodes.push(node('tg-review-persist-prepare', 'Prepare verification persistence', 'n8n-nodes-base.code', [1925, 300], {
+    jsCode: "const j=$json;const adapter_context=j.adapter_context??{review_interface:'slack',delivery_channel:'slack'};return[{json:{...j,evidence_ticket_ids_json:JSON.stringify(j.verification.evidence_ticket_ids),verification_response_json:JSON.stringify({result:j.verification,response:j.response,provider_failure:j.provider_failure===true}),review_context_json:JSON.stringify({cluster_id:j.cluster_id,tickets:j.tickets,verification:j.verification,adapter_context})}}];",
+  }));
+  workflow.connections['Use Gemini verification fallback?'].main[1][0].node = 'Prepare verification persistence';
+  workflow.connections['Validate Gemini verification fallback'].main[0][0].node = 'Prepare verification persistence';
+  connect(workflow, 'Prepare verification persistence', [['Persist verification']]);
 
   const persistDraft = byName(workflow, 'Persist pending report draft');
   persistDraft.parameters.query = "INSERT INTO ticket_cluster.cluster_report_drafts (cluster_id,model,summary,suspected_root_cause,impact,evidence,recommended_next_step,report,delivery_channel) VALUES ($1::uuid,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9) RETURNING id AS report_draft_id,cluster_id,summary,suspected_root_cause,impact,evidence,recommended_next_step,delivery_channel;";

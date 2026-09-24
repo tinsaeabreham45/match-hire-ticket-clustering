@@ -5,6 +5,7 @@ const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
 const telegram = readJson('workflows/telegram-interface.template.json');
 const review = readJson('workflows/cluster-review.template.json');
 const delivery = readJson('workflows/report-delivery.template.json');
+const requeue = readJson('workflows/requeue-cluster-verification.template.json');
 const migration = readFileSync('docs/sql/014_telegram_interface.sql', 'utf8');
 
 const validateGraph = (workflow) => {
@@ -100,6 +101,24 @@ for (const required of [
   'Post Telegram investigation card',
 ]) assert(reviewNames.has(required), `missing shared review node: ${required}`);
 assert.match(review.nodes.find((node) => node.name === 'Load cluster evidence').parameters.query, /telegram_case_messages/);
+const persistVerification = review.nodes.find((node) => node.name === 'Persist verification');
+const prepareVerificationPersistence = review.nodes.find((node) => node.name === 'Prepare verification persistence');
+assert(prepareVerificationPersistence, 'missing verification persistence preparation node');
+assert.match(prepareVerificationPersistence.parameters.jsCode, /verification_response_json/);
+assert.match(prepareVerificationPersistence.parameters.jsCode, /review_context_json/);
+assert.doesNotMatch(persistVerification.parameters.options.queryReplacement, /JSON\.stringify|\?\?|\?\s*\$json/);
+assert.equal(
+  review.connections['Use Gemini verification fallback?'].main[1][0].node,
+  'Prepare verification persistence',
+);
+assert.equal(
+  review.connections['Validate Gemini verification fallback'].main[0][0].node,
+  'Prepare verification persistence',
+);
+const requeueCode = requeue.nodes.find((node) => node.name === 'Set cluster to requeue').parameters.jsCode;
+assert.match(requeueCode, /REPLACE_WITH_REVIEW_INTERFACE_TO_REQUEUE/);
+assert.match(requeueCode, /REPLACE_WITH_DELIVERY_CHANNEL_TO_REQUEUE/);
+assert.match(requeueCode, /review_interface, delivery_channel/);
 assert.match(review.nodes.find((node) => node.name === 'Persist pending report draft').parameters.query, /delivery_channel/);
 
 const deliveryNames = new Set(delivery.nodes.map((node) => node.name));
