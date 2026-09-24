@@ -424,12 +424,6 @@
           "retry": {
             "maxTries": 3,
             "waitBetweenTries": 1000
-          },
-          "response": {
-            "response": {
-              "neverError": true,
-              "responseFormat": "json"
-            }
           }
         }
       }

@@ -165,7 +165,7 @@ return[{json:{...r,update_id:n.update_id,telegram_body:body}}];`,
       contentType: 'raw',
       rawContentType: 'application/json',
       body: "={{ JSON.stringify({ taskType: 'CLUSTERING', output_dimensionality: 768, content: { parts: [{ text: $('Claim Telegram intake job').item.json.ticket_text }] } }) }}",
-      options: { timeout: 15000, retry: { maxTries: 3, waitBetweenTries: 1000 }, response: { response: { neverError: true, responseFormat: 'json' } } },
+      options: { timeout: 15000, retry: { maxTries: 3, waitBetweenTries: 1000 } },
     }, 4.2),
     node('tg-0022', 'Validate queued Telegram embedding', 'n8n-nodes-base.code', [840, -180], {
       jsCode: `const job=$('Claim Telegram intake job').item.json,values=$json.embedding?.values;const valid=Array.isArray(values)&&values.length===768&&values.every(Number.isFinite);return[{json:{...job,embedding_valid:valid,embedding_vector:valid?'['+values.join(',')+']':null,error_message:valid?null:String($json.error?.message??$json.message??'Gemini returned an invalid embedding').slice(0,500)}}];`,

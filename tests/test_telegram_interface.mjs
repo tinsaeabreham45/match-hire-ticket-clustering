@@ -50,6 +50,13 @@ assert.doesNotMatch(serializedTelegram, /bot[0-9]{8,}:[A-Za-z0-9_-]{20,}/);
 assert.doesNotMatch(serializedTelegram, /api\.telegram\.org\/bot/);
 assert(telegram.nodes.some((node) => node.type === 'n8n-nodes-base.telegram' && node.parameters.operation === 'answerQuery'));
 assert.match(serializedTelegram, /editMessageText/);
+const telegramEmbedding = telegram.nodes.find((node) => node.name === 'Embed queued Telegram ticket');
+assert.equal(telegramEmbedding.parameters.options.response, undefined, 'embedding response must use n8n JSON auto-detection');
+assert.deepEqual(
+  telegramEmbedding.parameters.options,
+  readJson('workflows/support-ticket-clustering.template.json').nodes.find((node) => node.name === 'Embed ticket with Gemini').parameters.options,
+  'Telegram and Slack Gemini embedding nodes must use the same proven response options',
+);
 for (const telegramNode of [telegram, review, delivery].flatMap((workflow) => workflow.nodes).filter((node) => node.type === 'n8n-nodes-base.telegram')) {
   assert.equal(telegramNode.credentials, undefined, `${telegramNode.name} must remain credential-free in Git`);
 }
