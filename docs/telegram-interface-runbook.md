@@ -79,15 +79,26 @@ Open **Telegram support, review, and approval interface** in n8n. Select
 **Telegram webhook** and copy its **Production URL**. It must end with
 `/webhook/telegram-support-v1`; never use the test URL.
 
-From a private server shell, load the two variables from the protected
-environment and call Telegram's `setWebhook` endpoint. Do not paste token or
-secret values into this repository or n8n node fields. The request must set:
+From a private server shell, run the registration helper. It reads the webhook
+secret from the protected `.env` file and prompts for the BotFather token with
+input hidden. The token is not stored or placed in the process command line:
+
+```bash
+cd ~/ticket-clustering
+./scripts/register-telegram-webhook.sh
+```
+
+The helper registers the production URL
+`https://16.170.93.79.nip.io/webhook/telegram-support-v1`. To use a different
+approved hostname, set `TELEGRAM_WEBHOOK_URL` for that one command. Do not paste
+token or secret values into this repository or n8n node fields. The request
+sets:
 
 - `url`: the n8n production webhook URL;
 - `secret_token`: `TELEGRAM_WEBHOOK_SECRET`;
 - `allowed_updates`: `message` and `callback_query`;
-- `drop_pending_updates`: `true` only for the first activation, after the
-  operator confirms no legitimate update is waiting.
+- `drop_pending_updates`: `true` for this first activation, so stale updates
+  created before the workflow was ready cannot enter the live pipeline.
 
 Telegram will then include the secret-token header that the first Code node
 checks with a timing-safe comparison.
