@@ -1,14 +1,15 @@
 # n8n workflow import notes
 
-The n8n implementation is split into four inactive, credential-free imports:
+The n8n implementation is split into eight inactive, credential-free imports:
 
 1. `support-ticket-clustering.template.json` — Slack ticket intake, validation, Gemini embedding, idempotent seed-anchor assignment, and the sub-workflow call.
-2. cluster-review.template.json — evidence lookup, structured OpenRouter verification/report drafting with Gemini fallback on provider or strict-JSON failure, database persistence, and Slack Block Kit review card.
-3. `approval-handler.template.json` — signed Slack action callback, expected workspace/channel check, authorized approve/reject/split decision, and durable delivery queueing.
-4. `report-delivery.template.json` — one-stage-at-a-time Docs, Sheets, and engineering-Slack outbox worker.
-5. `requeue-cluster-verification.template.json` — operator-only manual recovery for a cluster whose prior verification completed in a safe needs_review state.
-6. `operational-error-capture.template.json` — records sanitized n8n workflow failures in the operator incident ledger.
-7. `operational-monitor.template.json` — refreshes delivery/review incidents and posts a rate-limited operations alert.
+2. `telegram-interface.template.json` — authenticated Telegram webhook, guided private ticket intake, durable/retrying intake queue, setup commands, callback decisions, and button finalization.
+3. `cluster-review.template.json` — evidence lookup, structured OpenRouter verification/report drafting with Gemini fallback on provider or strict-JSON failure, database persistence, and channel-routed Slack or Telegram review card.
+4. `approval-handler.template.json` — signed Slack action callback, expected workspace/channel check, authorized approve/reject/split decision, and durable delivery queueing.
+5. `report-delivery.template.json` — one-stage-at-a-time Docs, Sheets, and Slack/Telegram engineering-delivery outbox worker.
+6. `requeue-cluster-verification.template.json` — operator-only manual recovery for a cluster whose prior verification completed in a safe needs_review state.
+7. `operational-error-capture.template.json` — records sanitized n8n workflow failures in the operator incident ledger.
+8. `operational-monitor.template.json` — refreshes delivery/review incidents and posts a rate-limited operations alert.
 
 Import all production workflows before configuring any credential or activating a workflow.
 
@@ -23,10 +24,11 @@ Import all production workflows before configuring any credential or activating 
 - In the core workflow, select the imported **Cluster verification and triage draft** workflow in **Run verification and triage sub-workflow**. It receives the current `cluster_id` item.
 - For the approval handler, expose `SLACK_SIGNING_SECRET` only to the n8n container as a server-side environment variable and permit the built-in `crypto` module for the Code node. Slack's signature cannot be securely checked from a normal HTTP credential field alone. Add the support lead to `ticket_cluster.authorized_approvers` before activation.
 - Configure Google Docs/Sheets credentials after confirming this n8n version supports your planned service-account method. Create a `Cluster Log` worksheet with headers before enabling the Sheets node.
+- For Telegram, create a native **Telegram API** credential backed by `TELEGRAM_BOT_TOKEN` and attach it to every Telegram node. Expose `TELEGRAM_WEBHOOK_SECRET` only to the n8n container for the custom webhook Code node. Exported workflows contain neither value. Follow `docs/telegram-interface-runbook.md` to connect the private review and engineering groups with expiring one-time codes.
 
 ## Safe import order and activation test
 
-1. Apply SQL migrations `001` through `008` in numeric order to staging first.
+1. Apply SQL migrations `001` through `014` in numeric order to staging first.
 2. Import the workflows in the order above. Keep all inactive.
 3. Add only the plan's placeholder credentials in n8n; attach them to the annotated nodes. Do not send values to this repository or chat.
 4. Set the imported review and delivery workflow IDs in their parent nodes, then set Slack Interactivity to the approval handler's **production** webhook URL.

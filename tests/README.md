@@ -5,6 +5,7 @@ Google, OpenRouter, or Gemini.
 
 ```bash
 node tests/test_delivery_workflow.mjs
+node tests/test_telegram_interface.mjs
 node scripts/validate-production-foundation.mjs
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_review_integrity.sql
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_outbox_state_machine.sql
@@ -14,6 +15,7 @@ psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_recurrence_episodes.s
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_pilot_readiness_gates.sql
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_incident_lifecycle.sql
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_investigation_cards.sql
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/test_telegram_interface.sql
 bash tests/test_ingestion_concurrency.sh
 ```
 

@@ -49,12 +49,15 @@ For every workflow:
    - Google Docs/Sheets nodes: the credential backed by
      `GOOGLE_SERVICE_ACCOUNT_JSON` or the approved OAuth account.
    - Postgres nodes: the credential backed by `POSTGRES_PASSWORD`.
+   - Telegram nodes: a native Telegram API credential backed by
+     `TELEGRAM_BOT_TOKEN`. Telegram webhook validation uses the container-only
+     `TELEGRAM_WEBHOOK_SECRET`.
 4. Select referenced sub-workflows by their imported n8n workflow ID.
 5. Click **Publish**, then turn **Active** on. Confirm the UI shows an active
    production workflow, not “Listen for test event.”
 
 Import order: error capture; operational monitor; report-delivery worker;
-approval handler; cluster-review; core intake. Configure the error-capture
+approval handler; cluster-review; Telegram interface; core Slack intake. Configure the error-capture
 workflow as **Error Workflow** in each production workflow’s Settings.
 
 ## 4. Staging acceptance tests
@@ -63,6 +66,7 @@ Run the SQL and static checks, then carry out one real staging event:
 
 ```bash
 node tests/test_delivery_workflow.mjs
+node tests/test_telegram_interface.mjs
 node scripts/validate-production-foundation.mjs
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_review_integrity.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_outbox_state_machine.sql
@@ -72,6 +76,7 @@ docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < 
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_pilot_readiness_gates.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_incident_lifecycle.sql
 docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_investigation_cards.sql
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U n8n -d n8n_staging < tests/test_telegram_interface.sql
 docker compose exec -T -e TEST_DATABASE_URL=postgresql://n8n@localhost/n8n_staging postgres bash -s < tests/test_ingestion_concurrency.sh
 ```
 

@@ -1,43 +1,743 @@
 {
   "name": "Report delivery outbox worker (production template)",
   "nodes": [
-    {"parameters":{"inputSource":"passthrough"},"id":"e1200000-0000-4000-8000-000000000001","name":"When approval queues delivery","type":"n8n-nodes-base.executeWorkflowTrigger","typeVersion":1.1,"position":[180,180],"notes":"Receives report_draft_id from the approval workflow."},
-    {"parameters":{"rule":{"interval":[{"field":"minutes","minutesInterval":1}]}},"id":"e1200000-0000-4000-8000-000000000002","name":"Retry delivery every minute","type":"n8n-nodes-base.scheduleTrigger","typeVersion":1.2,"position":[180,380],"notes":"Enable only after the approval workflow and outbox migration are live."},
-    {"parameters":{"operation":"executeQuery","query":"SELECT a.*, d.cluster_id FROM ticket_cluster.claim_delivery_attempt($1::uuid) a JOIN ticket_cluster.cluster_report_drafts d ON d.id = a.report_draft_id;","options":{"queryReplacement":"={{ [$json.report_draft_id ?? null] }}"}},"id":"e1200000-0000-4000-8000-000000000003","name":"Claim next delivery attempt","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[430,280],"notes":"Claims exactly one ordered stage using SKIP LOCKED. An empty result means there is nothing due."},
-    {"parameters":{"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict"},"conditions":[{"leftValue":"={{ $json.target }}","rightValue":"google_doc","operator":{"type":"string","operation":"equals"}}],"combinator":"and"}},"id":"e1200000-0000-4000-8000-000000000004","name":"Google Doc stage?","type":"n8n-nodes-base.if","typeVersion":2.2,"position":[670,280]},
-    {"parameters":{"jsCode":"const r=$json;const document_title=`Support root-cause report — ${r.cluster_id}`;const document_content=`Support ticket root-cause report\\n\\nSummary\\n${r.summary}\\n\\nSuspected root cause\\n${r.suspected_root_cause}\\n\\nImpact\\n${r.impact}\\n\\nEvidence\\n${JSON.stringify(r.evidence,null,2)}\\n\\nRecommended next step\\n${r.recommended_next_step}\\n\\nApproved via Slack human review.`;return [{json:{...r,document_title,document_content}}];"},"id":"e1200000-0000-4000-8000-000000000005","name":"Format approved report","type":"n8n-nodes-base.code","typeVersion":2,"position":[900,120]},
-    {"parameters":{"authentication":"oAuth2","operation":"create","title":"={{ $json.document_title }}","driveId":"myDrive","folderId":""},"id":"e1200000-0000-4000-8000-000000000006","name":"Create approved Google Doc","type":"n8n-nodes-base.googleDocs","typeVersion":2,"position":[1130,120],"notes":"Attach Google Docs OAuth2. If this node fails, leave the outbox item uncompleted; the worker will reclaim it after its lease."},
-    {"parameters":{"authentication":"oAuth2","operation":"update","documentURL":"={{ $json.documentId ?? $json.id }}","simple":true,"actionsUi":{"actionFields":[{"object":"text","action":"insert","locationChoice":"endOfSegmentLocation","insertSegment":"body","text":"={{ $('Format approved report').item.json.document_content }}"}]}},"id":"e1200000-0000-4000-8000-000000000007","name":"Write approved report content","type":"n8n-nodes-base.googleDocs","typeVersion":2,"position":[1360,120]},
-    {"parameters":{"authentication":"oAuth2","operation":"get","documentURL":"={{ $json.documentId ?? $json.id }}","simple":true},"id":"e1200000-0000-4000-8000-000000000008","name":"Verify Google Doc content","type":"n8n-nodes-base.googleDocs","typeVersion":2,"position":[1590,120]},
-    {"parameters":{"jsCode":"const doc=$json, expected=String($('Format approved report').item.json.document_content??'').trim(), actual=String(doc.content??'').trim();if(!doc.documentId||!actual.includes(expected.slice(0,80)))throw new Error('Google Doc write verification failed; outbox stage remains unfinished');return [{json:{attempt_id:$('Claim next delivery attempt').item.json.attempt_id,google_doc_id:doc.documentId,google_doc_url:`https://docs.google.com/document/d/${doc.documentId}/edit`}}];"},"id":"e1200000-0000-4000-8000-000000000009","name":"Prepare Google Doc checkpoint","type":"n8n-nodes-base.code","typeVersion":2,"position":[1820,120]},
-    {"parameters":{"operation":"executeQuery","query":"SELECT ticket_cluster.complete_delivery_attempt($1::uuid,$2,$3);","options":{"queryReplacement":"={{ [$json.attempt_id,$json.google_doc_id,$json.google_doc_url] }}"}},"id":"e1200000-0000-4000-8000-000000000010","name":"Checkpoint Google Doc delivery","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[2050,120]},
-    {"parameters":{"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict"},"conditions":[{"leftValue":"={{ $json.target }}","rightValue":"google_sheets","operator":{"type":"string","operation":"equals"}}],"combinator":"and"}},"id":"e1200000-0000-4000-8000-000000000011","name":"Google Sheets stage?","type":"n8n-nodes-base.if","typeVersion":2.2,"position":[900,430]},
-    {"parameters":{"jsCode":"const r=$json;const document_title=`Support root-cause report — ${r.cluster_id}`;const document_content=`Support ticket root-cause report\\n\\nSummary\\n${r.summary}\\n\\nSuspected root cause\\n${r.suspected_root_cause}\\n\\nImpact\\n${r.impact}\\n\\nEvidence\\n${JSON.stringify(r.evidence,null,2)}\\n\\nRecommended next step\\n${r.recommended_next_step}\\n\\nApproved via Slack human review.`;return[{json:{report_draft_id:r.report_draft_id,cluster_id:r.cluster_id,summary:r.summary,suspected_root_cause:r.suspected_root_cause,impact:r.impact,evidence:r.evidence,recommended_next_step:r.recommended_next_step,document_title,document_content,google_doc_id:r.google_doc_id,google_doc_url:r.google_doc_url,reviewed_at:new Date().toISOString()}}];"},"id":"e1200000-0000-4000-8000-000000000012","name":"Prepare Sheets audit row","type":"n8n-nodes-base.code","typeVersion":2,"position":[1130,380]},
-    {"parameters":{"authentication":"oAuth2","operation":"append","documentId":{"__rl":true,"value":"REPLACE_WITH_GOOGLE_SHEET_ID","mode":"id"},"sheetName":{"__rl":true,"value":"Cluster Log","mode":"name"},"columns":{"mappingMode":"autoMapInputData","value":{},"schema":[]},"options":{}},"id":"e1200000-0000-4000-8000-000000000013","name":"Append approved audit row to Sheets","type":"n8n-nodes-base.googleSheets","typeVersion":4.7,"position":[1360,380],"notes":"Attach Google Sheets OAuth2 credential. The header row must match the documented fields."},
-    {"parameters":{"operation":"executeQuery","query":"SELECT ticket_cluster.complete_delivery_attempt($1::uuid,NULL,NULL);","options":{"queryReplacement":"={{ [$('Claim next delivery attempt').item.json.attempt_id] }}"}},"id":"e1200000-0000-4000-8000-000000000014","name":"Checkpoint Sheets delivery","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[1590,380]},
-    {"parameters":{"jsCode":"const r=$json;return[{json:{slack_body:{channel:'REPLACE_WITH_ENGINEERING_ALERTS_CHANNEL_ID',text:`Approved support root-cause alert: ${r.summary} — ${r.google_doc_url}`}}}];"},"id":"e1200000-0000-4000-8000-000000000015","name":"Build engineering alert","type":"n8n-nodes-base.code","typeVersion":2,"position":[1130,650]},
-    {"parameters":{"method":"POST","url":"https://slack.com/api/chat.postMessage","authentication":"predefinedCredentialType","nodeCredentialType":"slackApi","sendHeaders":true,"headerParameters":{"parameters":[{"name":"Content-Type","value":"application/json"}]},"sendBody":true,"contentType":"raw","rawContentType":"application/json","body":"={{ JSON.stringify($json.slack_body) }}","options":{"timeout":15000,"retry":{"maxTries":2,"waitBetweenTries":1000}}},"id":"e1200000-0000-4000-8000-000000000016","name":"Notify engineering","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[1360,650],"notes":"Attach the existing Slack API credential; it supplies the bot authorization header."},
-    {"parameters":{"jsCode":"if($json.ok!==true)throw new Error(`Engineering Slack alert rejected: ${$json.error??'unknown error'}`);return[{json:{attempt_id:$('Claim next delivery attempt').item.json.attempt_id}}];"},"id":"e1200000-0000-4000-8000-000000000017","name":"Verify engineering alert","type":"n8n-nodes-base.code","typeVersion":2,"position":[1590,650]},
-    {"parameters":{"operation":"executeQuery","query":"SELECT ticket_cluster.complete_delivery_attempt($1::uuid,NULL,NULL); SELECT ticket_cluster.finalize_report_delivery($2::uuid) AS finalized;","options":{"queryReplacement":"={{ [$json.attempt_id,$('Claim next delivery attempt').item.json.report_draft_id] }}"}},"id":"e1200000-0000-4000-8000-000000000018","name":"Checkpoint Slack and finalize delivery","type":"n8n-nodes-base.postgres","typeVersion":2.5,"position":[1820,650]},
-    {"parameters":{"conditions":{"options":{"caseSensitive":true,"leftValue":"","typeValidation":"strict"},"conditions":[{"leftValue":"={{ $json.target }}","rightValue":"eng_slack","operator":{"type":"string","operation":"equals"}}],"combinator":"and"}},"id":"e1200000-0000-4000-8000-000000000019","name":"Engineering Slack stage?","type":"n8n-nodes-base.if","typeVersion":2.2,"position":[1130,500]}
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "e1200000-0000-4000-8000-000000000001",
+      "name": "When approval queues delivery",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        180,
+        180
+      ],
+      "notes": "Receives report_draft_id from the approval workflow."
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "e1200000-0000-4000-8000-000000000002",
+      "name": "Retry delivery every minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        180,
+        380
+      ],
+      "notes": "Enable only after the approval workflow and outbox migration are live."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT a.*, d.cluster_id FROM ticket_cluster.claim_delivery_attempt($1::uuid) a JOIN ticket_cluster.cluster_report_drafts d ON d.id = a.report_draft_id;",
+        "options": {
+          "queryReplacement": "={{ [$json.report_draft_id ?? null] }}"
+        }
+      },
+      "id": "e1200000-0000-4000-8000-000000000003",
+      "name": "Claim next delivery attempt",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        430,
+        280
+      ],
+      "notes": "Claims exactly one ordered stage using SKIP LOCKED. An empty result means there is nothing due."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.target }}",
+              "rightValue": "google_doc",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "e1200000-0000-4000-8000-000000000004",
+      "name": "Google Doc stage?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        670,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$json;const document_title=`Support root-cause report — ${r.cluster_id}`;const document_content=`Support ticket root-cause report\\n\\nSummary\\n${r.summary}\\n\\nSuspected root cause\\n${r.suspected_root_cause}\\n\\nImpact\\n${r.impact}\\n\\nEvidence\\n${JSON.stringify(r.evidence,null,2)}\\n\\nRecommended next step\\n${r.recommended_next_step}\\n\\nApproved via human review.`;return [{json:{...r,document_title,document_content}}];"
+      },
+      "id": "e1200000-0000-4000-8000-000000000005",
+      "name": "Format approved report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "create",
+        "title": "={{ $json.document_title }}",
+        "driveId": "myDrive",
+        "folderId": ""
+      },
+      "id": "e1200000-0000-4000-8000-000000000006",
+      "name": "Create approved Google Doc",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        1130,
+        120
+      ],
+      "notes": "Attach Google Docs OAuth2. If this node fails, leave the outbox item uncompleted; the worker will reclaim it after its lease."
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "update",
+        "documentURL": "={{ $json.documentId ?? $json.id }}",
+        "simple": true,
+        "actionsUi": {
+          "actionFields": [
+            {
+              "object": "text",
+              "action": "insert",
+              "locationChoice": "endOfSegmentLocation",
+              "insertSegment": "body",
+              "text": "={{ $('Format approved report').item.json.document_content }}"
+            }
+          ]
+        }
+      },
+      "id": "e1200000-0000-4000-8000-000000000007",
+      "name": "Write approved report content",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "get",
+        "documentURL": "={{ $json.documentId ?? $json.id }}",
+        "simple": true
+      },
+      "id": "e1200000-0000-4000-8000-000000000008",
+      "name": "Verify Google Doc content",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        1590,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const doc=$json, expected=String($('Format approved report').item.json.document_content??'').trim(), actual=String(doc.content??'').trim();if(!doc.documentId||!actual.includes(expected.slice(0,80)))throw new Error('Google Doc write verification failed; outbox stage remains unfinished');return [{json:{attempt_id:$('Claim next delivery attempt').item.json.attempt_id,google_doc_id:doc.documentId,google_doc_url:`https://docs.google.com/document/d/${doc.documentId}/edit`}}];"
+      },
+      "id": "e1200000-0000-4000-8000-000000000009",
+      "name": "Prepare Google Doc checkpoint",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_cluster.complete_delivery_attempt($1::uuid,$2,$3);",
+        "options": {
+          "queryReplacement": "={{ [$json.attempt_id,$json.google_doc_id,$json.google_doc_url] }}"
+        }
+      },
+      "id": "e1200000-0000-4000-8000-000000000010",
+      "name": "Checkpoint Google Doc delivery",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2050,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.target }}",
+              "rightValue": "google_sheets",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "e1200000-0000-4000-8000-000000000011",
+      "name": "Google Sheets stage?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        900,
+        430
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$json;const document_title=`Support root-cause report — ${r.cluster_id}`;const document_content=`Support ticket root-cause report\\n\\nSummary\\n${r.summary}\\n\\nSuspected root cause\\n${r.suspected_root_cause}\\n\\nImpact\\n${r.impact}\\n\\nEvidence\\n${JSON.stringify(r.evidence,null,2)}\\n\\nRecommended next step\\n${r.recommended_next_step}\\n\\nApproved via human review.`;return[{json:{report_draft_id:r.report_draft_id,cluster_id:r.cluster_id,summary:r.summary,suspected_root_cause:r.suspected_root_cause,impact:r.impact,evidence:r.evidence,recommended_next_step:r.recommended_next_step,document_title,document_content,google_doc_id:r.google_doc_id,google_doc_url:r.google_doc_url,reviewed_at:new Date().toISOString()}}];"
+      },
+      "id": "e1200000-0000-4000-8000-000000000012",
+      "name": "Prepare Sheets audit row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1130,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "REPLACE_WITH_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Cluster Log",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "e1200000-0000-4000-8000-000000000013",
+      "name": "Append approved audit row to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1360,
+        380
+      ],
+      "notes": "Attach Google Sheets OAuth2 credential. The header row must match the documented fields."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_cluster.complete_delivery_attempt($1::uuid,NULL,NULL);",
+        "options": {
+          "queryReplacement": "={{ [$('Claim next delivery attempt').item.json.attempt_id] }}"
+        }
+      },
+      "id": "e1200000-0000-4000-8000-000000000014",
+      "name": "Checkpoint Sheets delivery",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1590,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const r=$json;return[{json:{slack_body:{channel:'REPLACE_WITH_ENGINEERING_ALERTS_CHANNEL_ID',text:`Approved support root-cause alert: ${r.summary} — ${r.google_doc_url}`}}}];"
+      },
+      "id": "e1200000-0000-4000-8000-000000000015",
+      "name": "Build engineering alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1130,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://slack.com/api/chat.postMessage",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.slack_body) }}",
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "maxTries": 2,
+            "waitBetweenTries": 1000
+          }
+        }
+      },
+      "id": "e1200000-0000-4000-8000-000000000016",
+      "name": "Notify engineering",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        650
+      ],
+      "notes": "Attach the existing Slack API credential; it supplies the bot authorization header."
+    },
+    {
+      "parameters": {
+        "jsCode": "if($json.ok!==true)throw new Error(`Engineering Slack alert rejected: ${$json.error??'unknown error'}`);return[{json:{attempt_id:$('Claim next delivery attempt').item.json.attempt_id}}];"
+      },
+      "id": "e1200000-0000-4000-8000-000000000017",
+      "name": "Verify engineering alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1590,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_cluster.complete_delivery_attempt($1::uuid,NULL,NULL); SELECT ticket_cluster.finalize_report_delivery($2::uuid) AS finalized;",
+        "options": {
+          "queryReplacement": "={{ [$json.attempt_id,$('Claim next delivery attempt').item.json.report_draft_id] }}"
+        }
+      },
+      "id": "e1200000-0000-4000-8000-000000000018",
+      "name": "Checkpoint Slack and finalize delivery",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1820,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.target }}",
+              "rightValue": "eng_slack",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "e1200000-0000-4000-8000-000000000019",
+      "name": "Engineering Slack stage?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1130,
+        500
+      ]
+    },
+    {
+      "id": "tg-delivery-01",
+      "name": "Engineering Telegram stage?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1360,
+        820
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.target }}",
+              "rightValue": "eng_telegram",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "tg-delivery-02",
+      "name": "Build Telegram engineering alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1590,
+        820
+      ],
+      "parameters": {
+        "jsCode": "const r=$json,escape=value=>String(value??'').replace(/[&<>]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));return[{json:{attempt_id:r.attempt_id,report_draft_id:r.report_draft_id,telegram_body:{chat_id:r.destination_ref,text:'Approved support root-cause alert: '+escape(String(r.summary??'').slice(0,3000))+' — '+escape(r.google_doc_url)}}}];"
+      }
+    },
+    {
+      "id": "tg-delivery-03",
+      "name": "Notify engineering in Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1820,
+        820
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.telegram_body.chat_id }}",
+        "text": "={{ $json.telegram_body.text }}",
+        "replyMarkup": "none",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      }
+    },
+    {
+      "id": "tg-delivery-04",
+      "name": "Verify Telegram engineering alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        820
+      ],
+      "parameters": {
+        "jsCode": "if($json.ok!==true||!$json.result?.message_id)throw new Error(`Engineering Telegram alert rejected: ${$json.description??'missing message id'}`);const s=$('Build Telegram engineering alert').item.json;return[{json:{attempt_id:s.attempt_id,report_draft_id:s.report_draft_id,message_id:String($json.result.message_id)}}];"
+      }
+    },
+    {
+      "id": "tg-delivery-05",
+      "name": "Checkpoint Telegram and finalize delivery",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2280,
+        820
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_cluster.complete_delivery_attempt($1::uuid,$2,NULL); SELECT ticket_cluster.finalize_report_delivery($3::uuid) AS finalized;",
+        "options": {
+          "queryReplacement": "={{ [$json.attempt_id,$json.message_id,$json.report_draft_id] }}"
+        }
+      }
+    }
   ],
   "connections": {
-    "When approval queues delivery":{"main":[[{"node":"Claim next delivery attempt","type":"main","index":0}]]},
-    "Retry delivery every minute":{"main":[[{"node":"Claim next delivery attempt","type":"main","index":0}]]},
-    "Claim next delivery attempt":{"main":[[{"node":"Google Doc stage?","type":"main","index":0}]]},
-    "Google Doc stage?":{"main":[[{"node":"Format approved report","type":"main","index":0}],[{"node":"Google Sheets stage?","type":"main","index":0}]]},
-    "Format approved report":{"main":[[{"node":"Create approved Google Doc","type":"main","index":0}]]},
-    "Create approved Google Doc":{"main":[[{"node":"Write approved report content","type":"main","index":0}]]},
-    "Write approved report content":{"main":[[{"node":"Verify Google Doc content","type":"main","index":0}]]},
-    "Verify Google Doc content":{"main":[[{"node":"Prepare Google Doc checkpoint","type":"main","index":0}]]},
-    "Prepare Google Doc checkpoint":{"main":[[{"node":"Checkpoint Google Doc delivery","type":"main","index":0}]]},
-    "Google Sheets stage?":{"main":[[{"node":"Prepare Sheets audit row","type":"main","index":0}],[{"node":"Engineering Slack stage?","type":"main","index":0}]]},
-    "Prepare Sheets audit row":{"main":[[{"node":"Append approved audit row to Sheets","type":"main","index":0}]]},
-    "Append approved audit row to Sheets":{"main":[[{"node":"Checkpoint Sheets delivery","type":"main","index":0}]]},
-    "Engineering Slack stage?":{"main":[[{"node":"Build engineering alert","type":"main","index":0}],[]]},
-    "Build engineering alert":{"main":[[{"node":"Notify engineering","type":"main","index":0}]]},
-    "Notify engineering":{"main":[[{"node":"Verify engineering alert","type":"main","index":0}]]},
-    "Verify engineering alert":{"main":[[{"node":"Checkpoint Slack and finalize delivery","type":"main","index":0}]]}
+    "When approval queues delivery": {
+      "main": [
+        [
+          {
+            "node": "Claim next delivery attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry delivery every minute": {
+      "main": [
+        [
+          {
+            "node": "Claim next delivery attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim next delivery attempt": {
+      "main": [
+        [
+          {
+            "node": "Google Doc stage?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Doc stage?": {
+      "main": [
+        [
+          {
+            "node": "Format approved report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Sheets stage?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format approved report": {
+      "main": [
+        [
+          {
+            "node": "Create approved Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create approved Google Doc": {
+      "main": [
+        [
+          {
+            "node": "Write approved report content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write approved report content": {
+      "main": [
+        [
+          {
+            "node": "Verify Google Doc content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Google Doc content": {
+      "main": [
+        [
+          {
+            "node": "Prepare Google Doc checkpoint",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Google Doc checkpoint": {
+      "main": [
+        [
+          {
+            "node": "Checkpoint Google Doc delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets stage?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sheets audit row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Engineering Slack stage?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Sheets audit row": {
+      "main": [
+        [
+          {
+            "node": "Append approved audit row to Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append approved audit row to Sheets": {
+      "main": [
+        [
+          {
+            "node": "Checkpoint Sheets delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Engineering Slack stage?": {
+      "main": [
+        [
+          {
+            "node": "Build engineering alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Engineering Telegram stage?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build engineering alert": {
+      "main": [
+        [
+          {
+            "node": "Notify engineering",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify engineering": {
+      "main": [
+        [
+          {
+            "node": "Verify engineering alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify engineering alert": {
+      "main": [
+        [
+          {
+            "node": "Checkpoint Slack and finalize delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Engineering Telegram stage?": {
+      "main": [
+        [
+          {
+            "node": "Build Telegram engineering alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Build Telegram engineering alert": {
+      "main": [
+        [
+          {
+            "node": "Notify engineering in Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify engineering in Telegram": {
+      "main": [
+        [
+          {
+            "node": "Verify Telegram engineering alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Telegram engineering alert": {
+      "main": [
+        [
+          {
+            "node": "Checkpoint Telegram and finalize delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "pinData":{},"active":false,"settings":{"executionOrder":"v1"},"meta":{"template":true,"credentialFree":true,"hardening":"outbox-backed ordered delivery; scheduler retries one stage per run"},"tags":[]
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "template": true,
+    "credentialFree": true,
+    "hardening": "outbox-backed ordered delivery; scheduler retries one stage per run"
+  },
+  "tags": []
 }

@@ -1,15 +1,15 @@
 # Support Ticket Root-Cause Clustering
 
-An event-driven support-ops prototype that groups recurring synthetic Slack tickets, verifies likely root causes with an LLM, and requires a support lead’s approval before engineering is alerted.
+An event-driven support-ops system that groups recurring Slack or Telegram support tickets, verifies likely root causes with an LLM, and requires a support lead’s approval before engineering is alerted.
 
 This is a job-application sprint artifact. It uses synthetic data as a proxy for a mid-size SaaS support team; it must not be represented as production performance or customer-data processing.
 
 ## What it does
 
-1. Receives a Slack ticket event and validates/idempotently records it.
+1. Receives a Slack event or a guided Telegram ticket and validates/idempotently records it.
 2. Embeds the text, assigns it against seed embeddings in pgvector, and retains a display centroid.
-3. When a cluster reaches three tickets, verifies the shared root cause, drafts a report, and posts it to `#support-triage` for a human decision.
-4. Only an approved review can create a Google Doc and notify `#eng-alerts`.
+3. When a cluster reaches three tickets, verifies the shared root cause, drafts a report, and posts it to the configured Slack or private Telegram review group.
+4. Only an authorized approval can create a Google Doc and notify the configured Slack or Telegram engineering destination.
 
 The architecture, safety gates, evaluation approach, and operator handoff are documented in this README and the public-facing files under `docs/`.
 
@@ -64,6 +64,7 @@ There is not yet a public, anonymous “anyone can run it” URL. That would req
 - Never commit `.env`, key/certificate files, service-account JSON, tokens, or database passwords.
 - `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `GOOGLE_SERVICE_ACCOUNT_JSON`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`, and `POSTGRES_PASSWORD` are placeholder names only.
 - The imported n8n workflow is a template. It does not include credentials and should be configured and tested in the live instance by the operator.
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_SECRET` are approved placeholder names; their real values remain outside Git and chat.
 
 ## Evidence status
 

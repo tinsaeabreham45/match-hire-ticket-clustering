@@ -16,11 +16,13 @@ At the private n8n operator URL supplied out-of-band by the system owner:
    - `workflows/approval-handler.template.json`
    - `workflows/cluster-review.template.json`
    - `workflows/requeue-cluster-verification.template.json`
+   - `workflows/telegram-interface.template.json`
    - `workflows/support-ticket-clustering.template.json`
 5. For each import, keep the top-right **Active/Published** switch off and select **Save**.
 6. In the approval workflow, select **Report delivery outbox worker (production template)** in **Run queued delivery worker**, then select **Cluster verification and triage draft (template)** in **Run cluster verification again**.
 7. In both the core and requeue workflows, select **Cluster verification and triage draft (template)** in their Execute Sub-workflow node.
-8. In every production workflow's **Settings**, select **Operational error capture (production template)** as the Error Workflow. Save all workflows.
+8. In the Telegram workflow, select **Cluster verification and triage draft (template)** in both verification nodes and **Report delivery outbox worker (production template)** in its delivery node.
+9. In every production workflow's **Settings**, select **Operational error capture (production template)** as the Error Workflow. Save all workflows.
 
 The core must be imported last because it references the review workflow by its n8n workflow ID.
 
@@ -35,8 +37,9 @@ Create credentials from the specific node that will consume them: click the node
 | `OPENROUTER_API_KEY` | **Header Auth**: header `Authorization`, value `Bearer <OpenRouter key>`. | Review: `Verify root cause with OpenRouter`; `Draft report with OpenRouter`. |
 | `POSTGRES_PASSWORD` | The **Postgres** credential offered by a Postgres node. Use host `postgres` (inside Compose), port `5432`, database `n8n`, user `n8n`, and the existing password. | Core: `Assign seed-anchored cluster`, `Record invalid ticket`. Review: `Load cluster evidence`, `Persist verification`, `Persist pending report draft`, `Create investigation case`, `Checkpoint investigation card`. Approval: both `Record authorized…` nodes. Delivery: claim/checkpoint nodes. Monitor/error capture: all Postgres nodes. |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Use the Google credential type offered by the imported Google Docs/Sheets nodes (OAuth2 may be required by the installed n8n version). Enable Google Docs, Sheets, and Drive APIs, and grant that identity access to the approved destination. | Delivery: `Create approved Google Doc`, `Write approved report content`, `Verify Google Doc content`, `Append approved audit row to Sheets`. |
+| `TELEGRAM_BOT_TOKEN` | Create the native **Telegram API** credential offered by a Telegram node and enter the BotFather access token. | Telegram interface: all Telegram nodes. Review: `Post Telegram approval card`, `Post Telegram investigation card`. Delivery: `Notify engineering in Telegram`. |
 
-`SLACK_SIGNING_SECRET` is not attached to a node credential: it must be a server-side n8n container environment variable because the approval callback validates an HMAC over the raw HTTP body. Also set `NODE_FUNCTION_ALLOW_BUILTIN=crypto` in the n8n service environment. Do not enter either value in workflow JSON or a Code node.
+`SLACK_SIGNING_SECRET` and `TELEGRAM_WEBHOOK_SECRET` are not attached to node credentials: they must be server-side n8n container environment variables because the callback/webhook Code nodes authenticate the raw incoming request. Also set `NODE_FUNCTION_ALLOW_BUILTIN=crypto` in the n8n service environment. Do not enter either value in workflow JSON or a Code node.
 
 ## 3. Replace configuration placeholders
 
@@ -45,6 +48,8 @@ Create credentials from the specific node that will consume them: click the node
 | `REPLACE_WITH_IMPORTED_CLUSTER_REVIEW_WORKFLOW_ID` | Core → `Run verification and triage sub-workflow` | Do not type an ID. Click the node and select **Cluster verification and triage draft (template)** from the workflow picker. |
 | `REPLACE_WITH_IMPORTED_REPORT_DELIVERY_WORKFLOW_ID` | Approval → `Run queued delivery worker` | Select **Report delivery outbox worker (production template)** from the workflow picker. |
 | `REPLACE_WITH_IMPORTED_CLUSTER_REVIEW_WORKFLOW_ID` | Core/requeue and Approval → `Run cluster verification again` | Select **Cluster verification and triage draft (template)** from the workflow picker. |
+| `REPLACE_WITH_IMPORTED_CLUSTER_REVIEW_WORKFLOW_ID` | Telegram → both verification Execute Workflow nodes | Select **Cluster verification and triage draft (template)** from the workflow picker. |
+| `REPLACE_WITH_IMPORTED_REPORT_DELIVERY_WORKFLOW_ID` | Telegram → `Run queued report delivery` | Select **Report delivery outbox worker (production template)** from the workflow picker. |
 | `REPLACE_WITH_SUPPORT_TICKETS_CHANNEL_ID` | Core → `Normalize and validate input` | Copy the ID of the one approved support-ticket channel. Messages from every other channel stop before persistence and embedding. |
 | `REPLACE_WITH_OPENROUTER_VERIFICATION_MODEL` | Review → `Build verification request` Code node | Replace with the OpenRouter model slug you selected for verification, for example a low-cost JSON-capable model slug shown in your OpenRouter Models page. Use the exact slug, not its display name. |
 | `REPLACE_WITH_OPENROUTER_REPORT_MODEL` | Review → `Build report request` Code node | Replace with the selected JSON-capable report-drafting model slug. It may be the same as verification. |

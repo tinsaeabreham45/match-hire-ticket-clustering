@@ -1,0 +1,1256 @@
+{
+  "name": "Telegram support, review, and approval interface (template)",
+  "nodes": [
+    {
+      "id": "tg-0001",
+      "name": "Telegram webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        180,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "telegram-support-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "f42d8d63-b979-4fd5-8c83-c8a96ef84a14"
+    },
+    {
+      "id": "tg-0002",
+      "name": "Authenticate and normalize Telegram update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        400
+      ],
+      "parameters": {
+        "jsCode": "const crypto=require('crypto');\nconst body=$json.body??$json;\nconst headers=$json.headers??{};\nconst expected=String($env.TELEGRAM_WEBHOOK_SECRET??'');\nconst provided=String(headers['x-telegram-bot-api-secret-token']??headers['X-Telegram-Bot-Api-Secret-Token']??'');\nconst equal=expected.length>0&&provided.length===expected.length&&crypto.timingSafeEqual(Buffer.from(provided),Buffer.from(expected));\nif(!equal)return[{json:{authorized:false}}];\nconst callback=body.callback_query;\nconst message=callback?.message??body.message;\nconst actor=callback?.from??message?.from;\nconst chat=message?.chat;\nconst updateId=Number(body.update_id);\nif(!Number.isSafeInteger(updateId)||!message||!actor||!chat)return[{json:{authorized:false}}];\nconst raw=String(message?.text??message?.caption??'').trim();\nconst redact=(value)=>String(value)\n .replace(/\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b/gi,'[REDACTED_EMAIL]')\n .replace(/\\b(?:\\d[ -]?){13,19}\\b/g,'[REDACTED_CARD]')\n .replace(/(?<![A-Za-z0-9])\\+?\\d[\\d(). -]{7,}\\d(?![A-Za-z0-9])/g,'[REDACTED_PHONE]');\nconst kind=callback?'callback_query':body.message?'message':'unsupported';\nreturn[{json:{authorized:true,update_id:updateId,kind,chat_id:chat.id,chat_type:String(chat.type??''),chat_title:String(chat.title??''),actor_user_id:actor.id,actor_name:[actor.first_name,actor.last_name].filter(Boolean).join(' '),text:redact(raw),callback_query_id:String(callback?.id??''),callback_token:String(callback?.data??''),message_id:message.message_id??null,message_text:String(message.text??''),received_at:new Date().toISOString()}}];"
+      }
+    },
+    {
+      "id": "tg-0003",
+      "name": "Authorized webhook?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        620,
+        400
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "tg-0004",
+      "name": "Reject unauthenticated webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        850,
+        560
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":false}",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "tg-0005",
+      "name": "Register idempotent Telegram update",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        850,
+        320
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ticket_cluster.register_telegram_update($1::bigint,$2,$3::bigint,$4::bigint,30);",
+        "options": {
+          "queryReplacement": "={{ [$json.update_id,$json.kind,$json.chat_id,$json.actor_user_id] }}"
+        }
+      }
+    },
+    {
+      "id": "tg-0006",
+      "name": "New update?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1070,
+        320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.accepted }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "tg-0007",
+      "name": "Acknowledge duplicate or limited update",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1290,
+        500
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":true}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "tg-0008",
+      "name": "Acknowledge accepted update",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1290,
+        260
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":true}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "tg-0009",
+      "name": "Callback query?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1510,
+        260
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Authenticate and normalize Telegram update').item.json.kind }}",
+              "rightValue": "callback_query",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "tg-0010",
+      "name": "Handle Telegram message state",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1730,
+        440
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ticket_cluster.handle_telegram_message($1::bigint,$2::bigint,$3,$4::bigint,$5,$6);",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Authenticate and normalize Telegram update').item.json.update_id,\n  $('Authenticate and normalize Telegram update').item.json.chat_id,\n  $('Authenticate and normalize Telegram update').item.json.chat_type,\n  $('Authenticate and normalize Telegram update').item.json.actor_user_id,\n  $('Authenticate and normalize Telegram update').item.json.actor_name,\n  $('Authenticate and normalize Telegram update').item.json.text\n] }}"
+        }
+      }
+    },
+    {
+      "id": "tg-0011",
+      "name": "Build Telegram bot reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1950,
+        440
+      ],
+      "parameters": {
+        "jsCode": "const r=$json,n=$('Authenticate and normalize Telegram update').item.json;\nconst escape=value=>String(value??'').replace(/[&<>]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));\nconst rawReply=String(r.reply_text??''),body={chat_id:n.chat_id,text:escape(rawReply.length>3900?rawReply.slice(0,3897)+'...':rawReply),disable_web_page_preview:true};\nif(r.operation==='preview')body.reply_markup={inline_keyboard:[[{text:'Confirm ticket',callback_data:r.confirm_token},{text:'Cancel',callback_data:r.cancel_token}]]};\nreturn[{json:{...r,update_id:n.update_id,telegram_body:body}}];"
+      }
+    },
+    {
+      "id": "tg-0012",
+      "name": "Send Telegram bot reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2170,
+        440
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.telegram_body.chat_id }}",
+        "text": "={{ $json.telegram_body.text }}",
+        "replyMarkup": "={{ $json.operation === 'preview' ? 'inlineKeyboard' : 'none' }}",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Confirm ticket",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.confirm_token }}"
+                    }
+                  },
+                  {
+                    "text": "Cancel",
+                    "additionalFields": {
+                      "callback_data": "={{ $json.cancel_token }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      }
+    },
+    {
+      "id": "tg-0013",
+      "name": "Verify Telegram bot reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2390,
+        440
+      ],
+      "parameters": {
+        "jsCode": "if($json.ok!==true)throw new Error(`Telegram sendMessage rejected: ${$json.description??'unknown error'}`);return[{json:{update_id:$('Authenticate and normalize Telegram update').item.json.update_id}}];"
+      }
+    },
+    {
+      "id": "tg-0014",
+      "name": "Complete Telegram message update",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2610,
+        440
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_cluster.complete_telegram_update($1::bigint,'completed') AS completed;",
+        "options": {
+          "queryReplacement": "={{ [$json.update_id] }}"
+        }
+      }
+    },
+    {
+      "id": "tg-0015",
+      "name": "Process Telegram callback atomically",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1730,
+        80
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ticket_cluster.process_telegram_callback($1::bigint,$2,$3,$4::bigint,$5::bigint,$6::bigint);",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Authenticate and normalize Telegram update').item.json.update_id,\n  $('Authenticate and normalize Telegram update').item.json.callback_query_id,\n  $('Authenticate and normalize Telegram update').item.json.callback_token,\n  $('Authenticate and normalize Telegram update').item.json.actor_user_id,\n  $('Authenticate and normalize Telegram update').item.json.chat_id,\n  $('Authenticate and normalize Telegram update').item.json.message_id\n] }}"
+        }
+      }
+    },
+    {
+      "id": "tg-0016",
+      "name": "Build callback acknowledgement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1950,
+        80
+      ],
+      "parameters": {
+        "jsCode": "const r=$json,n=$('Authenticate and normalize Telegram update').item.json;return[{json:{...r,update_id:n.update_id,telegram_body:{callback_query_id:n.callback_query_id,text:r.answer_text,show_alert:String(r.outcome).startsWith('denied_')}}}];"
+      }
+    },
+    {
+      "id": "tg-0017",
+      "name": "Answer Telegram callback",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2170,
+        80
+      ],
+      "parameters": {
+        "resource": "callback",
+        "operation": "answerQuery",
+        "queryId": "={{ $json.telegram_body.callback_query_id }}",
+        "additionalFields": {
+          "text": "={{ $json.telegram_body.text }}",
+          "show_alert": "={{ $json.telegram_body.show_alert }}"
+        }
+      }
+    },
+    {
+      "id": "tg-0018",
+      "name": "Complete Telegram callback update",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        2390,
+        80
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ticket_cluster.complete_telegram_update($1::bigint,'completed') AS completed;",
+        "options": {
+          "queryReplacement": "={{ [$('Build callback acknowledgement').item.json.update_id] }}"
+        }
+      }
+    },
+    {
+      "id": "tg-0019",
+      "name": "Retry Telegram intake jobs",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        180,
+        -180
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "tg-0020",
+      "name": "Claim Telegram intake job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        400,
+        -180
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ticket_cluster.claim_telegram_intake_job(5);",
+        "options": {}
+      }
+    },
+    {
+      "id": "tg-0021",
+      "name": "Embed queued Telegram ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        620,
+        -180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ taskType: 'CLUSTERING', output_dimensionality: 768, content: { parts: [{ text: $('Claim Telegram intake job').item.json.ticket_text }] } }) }}",
+        "options": {
+          "timeout": 15000,
+          "retry": {
+            "maxTries": 3,
+            "waitBetweenTries": 1000
+          },
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "tg-0022",
+      "name": "Validate queued Telegram embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        -180
+      ],
+      "parameters": {
+        "jsCode": "const job=$('Claim Telegram intake job').item.json,values=$json.embedding?.values;const valid=Array.isArray(values)&&values.length===768&&values.every(Number.isFinite);return[{json:{...job,embedding_valid:valid,embedding_vector:valid?'['+values.join(',')+']':null,error_message:valid?null:String($json.error?.message??$json.message??'Gemini returned an invalid embedding').slice(0,500)}}];"
+      }
+    },
+    {
+      "id": "tg-0023",
+      "name": "Embedding ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1060,
+        -180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.embedding_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "tg-0024",
+      "name": "Complete queued Telegram ticket",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1280,
+        -280
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ticket_cluster.complete_telegram_intake_job($1::uuid,$2::vector,'gemini-embedding-001','telegram-v1');",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id,$json.embedding_vector] }}"
+        }
+      }
+    },
+    {
+      "id": "tg-0025",
+      "name": "Build completed ticket message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        -280
+      ],
+      "parameters": {
+        "jsCode": "const r=$json,suffix=r.disposition==='duplicate'?'This ticket was already received.':'Ticket created: '+r.ticket_id;return[{json:{...r,telegram_body:{chat_id:r.chat_id,text:'✅ '+suffix+'\\n\\nYou can send follow-ups here or use /close.'}}}];"
+      }
+    },
+    {
+      "id": "tg-0026",
+      "name": "Send completed ticket message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1720,
+        -280
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.telegram_body.chat_id }}",
+        "text": "={{ $json.telegram_body.text }}",
+        "replyMarkup": "none",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      }
+    },
+    {
+      "id": "tg-0027",
+      "name": "Telegram verification required?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1940,
+        -280
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Complete queued Telegram ticket').item.json.review_required }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "tg-0028",
+      "name": "Prepare Telegram review request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2160,
+        -360
+      ],
+      "parameters": {
+        "jsCode": "const r=$('Complete queued Telegram ticket').item.json;return[{json:{...r,review_interface:'telegram',delivery_channel:'telegram'}}];"
+      }
+    },
+    {
+      "id": "tg-0029",
+      "name": "Run verification for Telegram cluster",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2380,
+        -360
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_IMPORTED_CLUSTER_REVIEW_WORKFLOW_ID"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "tg-0030",
+      "name": "Fail queued Telegram ticket",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1280,
+        -80
+      ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ticket_cluster.fail_telegram_intake_job($1::uuid,$2,5);",
+        "options": {
+          "queryReplacement": "={{ [$json.job_id,$json.error_message] }}"
+        }
+      }
+    },
+    {
+      "id": "tg-0031",
+      "name": "Telegram intake permanently failed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1500,
+        -80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.terminal }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "tg-0032",
+      "name": "Build Telegram intake failure message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1720,
+        -80
+      ],
+      "parameters": {
+        "jsCode": "return[{json:{telegram_body:{chat_id:$json.chat_id,text:'We could not process this ticket after several retries. Your description is still available; send it again or contact support operations.'}}}];"
+      }
+    },
+    {
+      "id": "tg-0033",
+      "name": "Send Telegram intake failure message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1940,
+        -80
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.telegram_body.chat_id }}",
+        "text": "={{ $json.telegram_body.text }}",
+        "replyMarkup": "none",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      }
+    },
+    {
+      "id": "tg-0034",
+      "name": "Finalize callback card?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2610,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Process Telegram callback atomically').item.json.operation }}",
+              "rightValue": "noop",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "tg-0035",
+      "name": "Build finalized callback card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2830,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const r=$('Process Telegram callback atomically').item.json,n=$('Authenticate and normalize Telegram update').item.json;const escape=value=>String(value??'').replace(/[&<>]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));const raw=n.message_text.replace(/\\n\\n(?:✅|❌|ℹ️|⏳)[\\s\\S]*$/,''),original=raw.length>3600?raw.slice(0,3597)+'...':raw;const icon=r.outcome==='queued'?'⏳':['delivery_queued','retry_queued'].includes(r.outcome)?'✅':r.outcome==='split'?'ℹ️':'❌';return[{json:{...r,telegram_body:{chat_id:n.chat_id,message_id:n.message_id,text:escape(original)+'\\n\\n'+icon+' '+escape(r.answer_text),reply_markup:{inline_keyboard:[]}}}}];"
+      }
+    },
+    {
+      "id": "tg-0036",
+      "name": "Disable finalized Telegram buttons",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3050,
+        200
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "editMessageText",
+        "messageType": "message",
+        "chatId": "={{ $json.telegram_body.chat_id }}",
+        "messageId": "={{ $json.telegram_body.message_id }}",
+        "text": "={{ $json.telegram_body.text }}",
+        "replyMarkup": "none",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      }
+    },
+    {
+      "id": "tg-0037",
+      "name": "Run queued Telegram delivery?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3270,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Process Telegram callback atomically').item.json.operation }}",
+              "rightValue": "run_delivery",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "tg-0038",
+      "name": "Run queued report delivery",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3490,
+        120
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_IMPORTED_REPORT_DELIVERY_WORKFLOW_ID"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "tg-0039",
+      "name": "Retry Telegram investigation?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3490,
+        280
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $('Process Telegram callback atomically').item.json.operation }}",
+              "rightValue": "retry_verification",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "tg-0040",
+      "name": "Run Telegram verification again",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        3710,
+        280
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_IMPORTED_CLUSTER_REVIEW_WORKFLOW_ID"
+        },
+        "options": {}
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram webhook": {
+      "main": [
+        [
+          {
+            "node": "Authenticate and normalize Telegram update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authenticate and normalize Telegram update": {
+      "main": [
+        [
+          {
+            "node": "Authorized webhook?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorized webhook?": {
+      "main": [
+        [
+          {
+            "node": "Register idempotent Telegram update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject unauthenticated webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register idempotent Telegram update": {
+      "main": [
+        [
+          {
+            "node": "New update?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New update?": {
+      "main": [
+        [
+          {
+            "node": "Acknowledge accepted update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Acknowledge duplicate or limited update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acknowledge accepted update": {
+      "main": [
+        [
+          {
+            "node": "Callback query?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback query?": {
+      "main": [
+        [
+          {
+            "node": "Process Telegram callback atomically",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Telegram message state",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Telegram message state": {
+      "main": [
+        [
+          {
+            "node": "Build Telegram bot reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Telegram bot reply": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram bot reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram bot reply": {
+      "main": [
+        [
+          {
+            "node": "Verify Telegram bot reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Telegram bot reply": {
+      "main": [
+        [
+          {
+            "node": "Complete Telegram message update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Telegram callback atomically": {
+      "main": [
+        [
+          {
+            "node": "Build callback acknowledgement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build callback acknowledgement": {
+      "main": [
+        [
+          {
+            "node": "Answer Telegram callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Telegram callback": {
+      "main": [
+        [
+          {
+            "node": "Complete Telegram callback update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Telegram callback update": {
+      "main": [
+        [
+          {
+            "node": "Finalize callback card?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Telegram intake jobs": {
+      "main": [
+        [
+          {
+            "node": "Claim Telegram intake job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Telegram intake job": {
+      "main": [
+        [
+          {
+            "node": "Embed queued Telegram ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embed queued Telegram ticket": {
+      "main": [
+        [
+          {
+            "node": "Validate queued Telegram embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate queued Telegram embedding": {
+      "main": [
+        [
+          {
+            "node": "Embedding ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embedding ready?": {
+      "main": [
+        [
+          {
+            "node": "Complete queued Telegram ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail queued Telegram ticket",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete queued Telegram ticket": {
+      "main": [
+        [
+          {
+            "node": "Build completed ticket message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build completed ticket message": {
+      "main": [
+        [
+          {
+            "node": "Send completed ticket message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send completed ticket message": {
+      "main": [
+        [
+          {
+            "node": "Telegram verification required?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram verification required?": {
+      "main": [
+        [
+          {
+            "node": "Prepare Telegram review request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Prepare Telegram review request": {
+      "main": [
+        [
+          {
+            "node": "Run verification for Telegram cluster",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail queued Telegram ticket": {
+      "main": [
+        [
+          {
+            "node": "Telegram intake permanently failed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram intake permanently failed?": {
+      "main": [
+        [
+          {
+            "node": "Build Telegram intake failure message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Build Telegram intake failure message": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram intake failure message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize callback card?": {
+      "main": [
+        [
+          {
+            "node": "Build finalized callback card",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Build finalized callback card": {
+      "main": [
+        [
+          {
+            "node": "Disable finalized Telegram buttons",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Disable finalized Telegram buttons": {
+      "main": [
+        [
+          {
+            "node": "Run queued Telegram delivery?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run queued Telegram delivery?": {
+      "main": [
+        [
+          {
+            "node": "Run queued report delivery",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retry Telegram investigation?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Telegram investigation?": {
+      "main": [
+        [
+          {
+            "node": "Run Telegram verification again",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [],
+  "meta": {
+    "template": true,
+    "credentialFree": true,
+    "secrets": [
+      "TELEGRAM_BOT_TOKEN",
+      "TELEGRAM_WEBHOOK_SECRET"
+    ]
+  }
+}
