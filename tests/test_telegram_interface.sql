@@ -4,6 +4,30 @@ SET search_path TO ticket_cluster, public;
 
 DO $$
 DECLARE
+  review_code text;
+  engineering_code text;
+  result text;
+BEGIN
+  review_code := create_telegram_setup_code('review');
+  engineering_code := create_telegram_setup_code('engineering');
+  result := consume_telegram_setup_code(
+    review_code, 'review', -900001, 'group', 'Test Review', 700001, 'Reviewer'
+  );
+  IF result <> 'connected' THEN RAISE EXCEPTION 'review setup failed: %', result; END IF;
+
+  result := consume_telegram_setup_code(
+    engineering_code, 'engineering', -900001, 'group', 'Test Review', 700001, 'Reviewer'
+  );
+  IF result <> 'chat_already_connected' THEN
+    RAISE EXCEPTION 'cross-role setup was not rejected safely: %', result;
+  END IF;
+  DELETE FROM telegram_connections WHERE chat_id = -900001;
+  DELETE FROM authorized_telegram_approvers WHERE telegram_user_id = 700001;
+END;
+$$;
+
+DO $$
+DECLARE
   v_new record;
   v_preview record;
   v_callback record;
@@ -123,4 +147,3 @@ $$;
 
 ROLLBACK;
 \echo 'PASS: Telegram SQL intake, idempotency, authorization, review, and routing checks.'
-

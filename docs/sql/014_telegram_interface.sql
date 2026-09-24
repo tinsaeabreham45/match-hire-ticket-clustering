@@ -290,6 +290,15 @@ BEGIN
   IF p_role NOT IN ('review', 'engineering') THEN RETURN 'invalid_role'; END IF;
   IF p_chat_type NOT IN ('group', 'supergroup', 'channel') THEN RETURN 'group_required'; END IF;
 
+  PERFORM pg_advisory_xact_lock(p_chat_id);
+
+  IF EXISTS (
+    SELECT 1 FROM telegram_connections
+    WHERE chat_id = p_chat_id AND role <> p_role AND active
+  ) THEN
+    RETURN 'chat_already_connected';
+  END IF;
+
   SELECT * INTO v_code
   FROM telegram_setup_codes
   WHERE role = p_role

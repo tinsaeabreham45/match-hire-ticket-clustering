@@ -103,5 +103,10 @@ for (const required of [
   'Checkpoint Telegram and finalize delivery',
 ]) assert(deliveryNames.has(required), `missing Telegram delivery node: ${required}`);
 assert.doesNotMatch(delivery.nodes.find((node) => node.name === 'Prepare Sheets audit row').parameters.jsCode, /Approved via Slack human review/);
+assert.equal(
+  delivery.nodes.find((node) => node.name === 'Create approved Google Doc').parameters.folderId,
+  'REPLACE_WITH_GOOGLE_DRIVE_FOLDER_ID',
+  'Google Docs delivery must require an explicit destination folder',
+);
 
 console.log('PASS: Telegram adapter security, durability, review, and delivery contracts are present.');

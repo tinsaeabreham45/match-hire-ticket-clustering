@@ -103,7 +103,7 @@
         "operation": "create",
         "title": "={{ $json.document_title }}",
         "driveId": "myDrive",
-        "folderId": ""
+        "folderId": "REPLACE_WITH_GOOGLE_DRIVE_FOLDER_ID"
       },
       "id": "e1200000-0000-4000-8000-000000000006",
       "name": "Create approved Google Doc",

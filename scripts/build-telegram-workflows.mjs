@@ -346,6 +346,10 @@ function extendClusterReview() {
 
 function extendReportDelivery() {
   const workflow = load('workflows/report-delivery.template.json');
+  const createDocument = byName(workflow, 'Create approved Google Doc');
+  if (!createDocument.parameters.folderId) {
+    createDocument.parameters.folderId = 'REPLACE_WITH_GOOGLE_DRIVE_FOLDER_ID';
+  }
   if (workflow.nodes.some((candidate) => candidate.name === 'Engineering Telegram stage?')) {
     const notify = byName(workflow, 'Notify engineering in Telegram');
     notify.type = 'n8n-nodes-base.telegram'; notify.typeVersion = 1.2; notify.parameters = telegramSend();
