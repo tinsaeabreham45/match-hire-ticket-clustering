@@ -77,6 +77,7 @@ const migration009 = readFileSync('docs/sql/009_recurrence_episodes.sql', 'utf8'
 const migration010 = readFileSync('docs/sql/010_pilot_readiness_gates.sql', 'utf8');
 const migration011 = readFileSync('docs/sql/011_incident_lifecycle.sql', 'utf8');
 const migration012 = readFileSync('docs/sql/012_investigation_cards.sql', 'utf8');
+const migration013 = readFileSync('docs/sql/013_workflow_incident_lifecycle.sql', 'utf8');
 assert.match(migration007, /operational_incidents/);
 assert.match(migration007, /record_workflow_failure/);
 assert.match(migration007, /severity = 'error' AND notified_at/);
@@ -99,6 +100,10 @@ assert.match(migration012, /create_cluster_investigation/);
 assert.match(migration012, /record_investigation_decision/);
 assert.match(migration012, /cluster_investigations_one_open_idx/);
 assert.match(migration012, /investigation_delivery_stuck/);
+assert.match(migration013, /resolve_operational_incident/);
+assert.match(migration013, /oi\.kind IN/);
+assert.match(migration013, /workflow_failure/);
+assert.doesNotMatch(migration013, /oi\.kind IN \([^)]*workflow_failure/s);
 
 for (const required of [
   'Create investigation case',

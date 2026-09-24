@@ -7,7 +7,7 @@ Operate the synthetic-ticket clustering demo safely. The support lead owns appro
 ## Pre-flight checklist
 
 1. Confirm the EC2 n8n endpoint is HTTPS-reachable and the Postgres/pgvector service is healthy.
-2. Apply migrations `docs/sql/001_cluster_schema.sql` through `docs/sql/012_investigation_cards.sql` in numeric order to staging first; confirm the `ticket_cluster` schema and `vector` extension exist.
+2. Apply migrations `docs/sql/001_cluster_schema.sql` through `docs/sql/013_workflow_incident_lifecycle.sql` in numeric order to staging first; confirm the `ticket_cluster` schema and `vector` extension exist.
 3. In n8n's credential store, add the required integration credentials. Never paste their values into workflow fields, exports, logs, or this repository.
 4. Import all inactive templates in `workflows/`: core intake, cluster review, approval handler, and report-delivery worker. In the core workflow select the imported review sub-workflow by ID; in the approval workflow select the imported delivery worker by ID.
 5. Attach the appropriate Slack, Postgres, Gemini, OpenRouter, Google Docs, and Google Sheets credentials; replace every `REPLACE_WITH_*` configuration value; import the operational error-capture workflow; and select it as the Error Workflow for every production workflow.
@@ -32,6 +32,7 @@ Operate the synthetic-ticket clustering demo safely. The support lead owns appro
 - Run `SELECT ticket_cluster.redact_expired_ticket_content();` on the approved retention cadence. Test this against staging first: it permanently removes stored ticket text and ticket embeddings after the retention period.
 - Treat each recurrence episode as a new review boundary. Episode 1 reports remain immutable; after the configured cooldown, a matching issue opens the next linked episode and must independently cross the review threshold.
 - Treat `verification_attention` as a one-time operator warning for a valid low-confidence `needs_review` result. A repeating `verification_stuck` error means no model decision was recorded and requires workflow recovery.
+- Treat `workflow_failure` as a one-time execution alert. Acknowledge it while investigating, then call `ticket_cluster.resolve_operational_incident(incident_key, actor, recovery_note)` only after the failed business item has been recovered or deliberately closed. A later unrelated success is not sufficient proof of recovery.
 - A **Root-cause investigation required** card is not an engineering approval. **Retry verification** reruns the same stored evidence, **Dismiss** closes without delivery, and **Split cluster** records that the grouping was incorrect. Only authorized reviewers may use these actions.
 - Record every evaluation run in `docs/evaluation.md` or the designated Sheet, including model and threshold versions.
 
@@ -44,7 +45,7 @@ Operate the synthetic-ticket clustering demo safely. The support lead owns appro
 | OpenRouter failure or invalid structured output | Let bounded retries finish; Gemini 2.5 Flash should run once as the fallback. Never send an approval card until a valid structured response passes validation. | Check provider status and the review execution. If Gemini also fails, the cluster remains needs_review; use the operator requeue workflow after recovery rather than creating duplicate tickets. |
 | Slack callback invalid/replayed | Reject the action and retain an audit/error event. | Verify raw-body signature handling and timestamp tolerance. |
 | Docs/Sheets delivery failure | Keep approved payload and notify operator; do not silently drop it. | Retry delivery after fixing integration; update the record. |
-| Operational incident | Use its incident key, execution ID, and target to identify the failed boundary. Do not paste ticket content into operations chat. | Acknowledge with an owner/note, correct the dependency, then requeue only the failed stage. |
+| Operational incident | Use its incident key, execution ID, and target to identify the failed boundary. Do not paste ticket content into operations chat. | Acknowledge with an owner/note, correct the dependency, requeue only the failed stage, verify recovery, then resolve it with an auditable recovery note. |
 | Secret exposed | Revoke/rotate it immediately and remove it from history/logs as appropriate. | Document the incident without reproducing the secret. |
 
 ## Demo data retention
